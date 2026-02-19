@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { UtensilsCrossed, Eye, EyeOff, Loader2 } from "lucide-react";
+import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { supabase, getProfile } from "@/lib/supabase";
 
@@ -98,8 +98,8 @@ const LoginPage = () => {
     <div className="min-h-screen flex flex-col items-center justify-center px-6">
       <div className="w-full max-w-sm animate-fade-in">
         <div className="flex flex-col items-center mb-8">
-          <div className="w-16 h-16 rounded-2xl bg-primary flex items-center justify-center mb-4">
-            <UtensilsCrossed className="w-8 h-8 text-primary-foreground" />
+          <div className="w-20 h-20 rounded-2xl overflow-hidden mb-4 shadow-md">
+            <img src="/Krishna Logo.png" alt="MessBuddy Logo" className="w-full h-full object-cover" />
           </div>
           <h1 className="text-2xl font-bold">MessBuddy</h1>
           <p className="text-sm text-muted-foreground mt-1">Your mess, managed.</p>
