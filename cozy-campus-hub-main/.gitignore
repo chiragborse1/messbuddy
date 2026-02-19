@@ -13,6 +13,8 @@ lerna-debug.log*
 bun.lockb
 package-lock.json
 
+# Supabase SQL migration scripts (already applied, no need in repo)
+*.sql
 node_modules
 dist
 dist-ssr
