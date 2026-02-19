@@ -101,7 +101,7 @@ const LoginPage = () => {
           <div className="w-20 h-20 rounded-2xl overflow-hidden mb-4 shadow-md">
             <img src="/Krishna Logo.png" alt="MessBuddy Logo" className="w-full h-full object-cover" />
           </div>
-          <h1 className="text-2xl font-bold">MessBuddy</h1>
+          <h1 className="text-2xl font-bold">Kanhaiya Mess</h1>
           <p className="text-sm text-muted-foreground mt-1">Your mess, managed.</p>
         </div>
 

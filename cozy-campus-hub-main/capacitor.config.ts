@@ -2,7 +2,7 @@ import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
     appId: 'com.chirag.messbuddy',
-    appName: 'MessBuddy',
+    appName: 'Kanhaiya Mess',
     webDir: 'dist',
 
     // LIVE UPDATE MODE (recommended for production):
