@@ -80,13 +80,17 @@ const LoginPage = () => {
       }
     } catch (error: any) {
       console.error(error);
+      const message = error.message || "Invalid credentials";
+      const isNotConfirmed = message.toLowerCase().includes("email not confirmed") ||
+        message.toLowerCase().includes("not confirmed");
       toast({
-        title: "Login Failed",
-        description: error.message || "Invalid credentials",
+        title: isNotConfirmed ? "Email Not Verified" : "Login Failed",
+        description: isNotConfirmed
+          ? "Please check your inbox and click the verification link we sent you before logging in."
+          : message,
         variant: "destructive",
       });
-      // Ensure specific logout on failure if session was created but validation failed
-      if (error.message.includes("Access Denied")) {
+      if (error.message?.includes("Access Denied")) {
         navigate("/");
       }
     } finally {

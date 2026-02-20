@@ -24,6 +24,7 @@ import AdminProfile from "./pages/admin/AdminProfile";
 import AdminChat from "./pages/admin/AdminChat";
 import AdminAnalytics from "./pages/admin/AdminAnalytics";
 import NotFound from "./pages/NotFound";
+import AuthCallback from "./pages/AuthCallback";
 
 const queryClient = new QueryClient();
 
@@ -39,6 +40,7 @@ const App = () => (
             <Routes>
               <Route path="/" element={<LoginPage />} />
               <Route path="/signup" element={<SignupPage />} />
+              <Route path="/auth/callback" element={<AuthCallback />} />
 
               {/* Student Routes */}
               <Route path="/student" element={<StudentDashboard />} />

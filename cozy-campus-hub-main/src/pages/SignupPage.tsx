@@ -51,7 +51,6 @@ const SignupPage = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Start Validation
     if (!photoFile) {
       toast({
         title: "Profile Photo Required",
@@ -60,22 +59,20 @@ const SignupPage = () => {
       });
       return;
     }
-    // End Validation
 
     setLoading(true);
 
     try {
-      // 1. Sign up user with Metadata (Triggers the SQL function)
       const { data, error } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
         options: {
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
           data: {
             name: formData.name,
             mobile: formData.mobile,
             college: formData.college,
             course: formData.course,
-            password: formData.password, // Storing unencrypted password
             role: 'student',
             status: 'pending'
           }
@@ -84,32 +81,9 @@ const SignupPage = () => {
 
       if (error) throw error;
 
-      if (data.user) {
-        // 2. If we have a session (Email Confirm Disabled), Upload Photo & Update Profile
-        if (data.session && photoFile) {
-          try {
-            const photoUrl = await uploadPhoto(data.user.id, photoFile);
-            if (photoUrl) {
-              await supabase.from('profiles').update({
-                photo_url: photoUrl,
-                status: 'pending',
-                plan: null,
-                plan_end_date: null
-              }).eq('id', data.user.id);
-            }
-          } catch (photoErr) {
-            console.error("Photo upload failed (non-critical):", photoErr);
-          }
-        } else if (photoFile && !data.session) {
-          console.log("Session not active (Email Verification likely enabled). Photo skipped.");
-          toast({
-            title: "Signup Successful",
-            description: "Please verify your email to log in and upload your photo.",
-          });
-        }
-
-        setSubmitted(true);
-      }
+      // Photo will be uploaded after email is verified & admin approves.
+      // We can't upload to storage before the auth session is confirmed.
+      setSubmitted(true);
     } catch (error: any) {
       console.error(error);
       toast({
@@ -125,12 +99,15 @@ const SignupPage = () => {
   if (submitted) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center px-6 animate-fade-in">
-        <div className="w-20 h-20 rounded-full bg-secondary flex items-center justify-center mb-6">
+        <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center mb-6">
           <CheckCircle2 className="w-10 h-10 text-primary" />
         </div>
-        <h2 className="text-xl font-bold mb-2">Request Submitted!</h2>
+        <h2 className="text-xl font-bold mb-2">Check Your Email 📬</h2>
+        <p className="text-sm text-muted-foreground text-center mb-2 max-w-xs">
+          We sent a verification link to <span className="font-semibold text-foreground">{formData.email}</span>.
+        </p>
         <p className="text-sm text-muted-foreground text-center mb-8 max-w-xs">
-          Your account has been created and is pending admin approval. You'll be notified via email once approved.
+          Click the link in the email to verify your account, then come back here to log in. After that, your account will be reviewed by an admin.
         </p>
         <div className="flex flex-col gap-3 w-full max-w-xs">
           <Button variant="default" onClick={() => navigate("/")} className="rounded-xl w-full">
@@ -140,6 +117,7 @@ const SignupPage = () => {
       </div>
     );
   }
+
 
   return (
     <div className="min-h-screen pb-8">
