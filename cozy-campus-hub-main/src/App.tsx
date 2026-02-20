@@ -1,3 +1,4 @@
+import { SpeedInsights } from "@vercel/speed-insights/react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -28,42 +29,45 @@ const queryClient = new QueryClient();
 
 
 const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <UserProvider>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter>
-          <Routes>
-            <Route path="/" element={<LoginPage />} />
-            <Route path="/signup" element={<SignupPage />} />
+  <>
+    <QueryClientProvider client={queryClient}>
+      <UserProvider>
+        <TooltipProvider>
+          <Toaster />
+          <Sonner />
+          <BrowserRouter>
+            <Routes>
+              <Route path="/" element={<LoginPage />} />
+              <Route path="/signup" element={<SignupPage />} />
 
-            {/* Student Routes */}
-            <Route path="/student" element={<StudentDashboard />} />
-            <Route path="/student/menu" element={<StudentMenu />} />
-            <Route path="/student/fees" element={<StudentFees />} />
-            <Route path="/student/leave" element={<StudentLeave />} />
-            <Route path="/student/help" element={<StudentHelp />} />
-            <Route path="/student/profile" element={<StudentProfile />} />
-            <Route path="/student/feedback" element={<StudentFeedback />} />
-            <Route path="/student/chat" element={<StudentChat />} />
+              {/* Student Routes */}
+              <Route path="/student" element={<StudentDashboard />} />
+              <Route path="/student/menu" element={<StudentMenu />} />
+              <Route path="/student/fees" element={<StudentFees />} />
+              <Route path="/student/leave" element={<StudentLeave />} />
+              <Route path="/student/help" element={<StudentHelp />} />
+              <Route path="/student/profile" element={<StudentProfile />} />
+              <Route path="/student/feedback" element={<StudentFeedback />} />
+              <Route path="/student/chat" element={<StudentChat />} />
 
-            {/* Admin Routes */}
-            <Route path="/admin" element={<AdminDashboard />} />
-            <Route path="/admin/students" element={<AdminStudents />} />
-            <Route path="/admin/menu" element={<AdminMenu />} />
-            <Route path="/admin/payments" element={<AdminPayments />} />
-            <Route path="/admin/leaves" element={<AdminLeaves />} />
-            <Route path="/admin/analytics" element={<AdminAnalytics />} />
-            <Route path="/admin/chat" element={<AdminChat />} />
-            <Route path="/admin/profile" element={<AdminProfile />} />
+              {/* Admin Routes */}
+              <Route path="/admin" element={<AdminDashboard />} />
+              <Route path="/admin/students" element={<AdminStudents />} />
+              <Route path="/admin/menu" element={<AdminMenu />} />
+              <Route path="/admin/payments" element={<AdminPayments />} />
+              <Route path="/admin/leaves" element={<AdminLeaves />} />
+              <Route path="/admin/analytics" element={<AdminAnalytics />} />
+              <Route path="/admin/chat" element={<AdminChat />} />
+              <Route path="/admin/profile" element={<AdminProfile />} />
 
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </BrowserRouter>
-      </TooltipProvider>
-    </UserProvider>
-  </QueryClientProvider>
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </BrowserRouter>
+        </TooltipProvider>
+      </UserProvider>
+    </QueryClientProvider>
+    <SpeedInsights />
+  </>
 );
 
 export default App;

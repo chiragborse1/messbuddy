@@ -3,7 +3,7 @@ import AdminBottomNav from "@/components/AdminBottomNav";
 import { useUser } from "@/contexts/UserContext";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
-import { User, Mail, Phone, Building2, Shield, LogOut, Camera, Loader2, RefreshCw, PhoneCall } from "lucide-react";
+import { User, Mail, Phone, Building2, Shield, LogOut, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/hooks/use-toast";
@@ -27,53 +27,7 @@ const AdminProfile = () => {
         setIsRefreshing(false);
     };
 
-    const handlePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file || !user) return;
 
-        // 1. Show preview immediately
-        const previewUrl = URL.createObjectURL(file);
-        setPhotoPreview(previewUrl);
-
-        try {
-            setIsRefreshing(true); // Show loading state
-
-            // 2. Upload to Supabase Storage 'avatars' bucket
-            const fileExt = file.name.split('.').pop();
-            const fileName = `${user.id}-${Date.now()}.${fileExt}`;
-            const filePath = `${fileName}`;
-
-            const { error: uploadError } = await supabase.storage
-                .from('avatars')
-                .upload(filePath, file);
-
-            if (uploadError) throw uploadError;
-
-            // 3. Get Public URL
-            const { data: { publicUrl } } = supabase.storage
-                .from('avatars')
-                .getPublicUrl(filePath);
-
-            // 4. Update Profile
-            await updateUser({ photo: publicUrl });
-
-            toast({
-                title: "Photo Updated",
-                description: "Your profile picture has been changed.",
-            });
-
-        } catch (error: any) {
-            console.error("Error uploading photo:", error);
-            setPhotoPreview(user.photo || null); // Revert
-            toast({
-                title: "Upload Failed",
-                description: error.message || "Ensure 'avatars' bucket exists and is public.",
-                variant: "destructive"
-            });
-        } finally {
-            setIsRefreshing(false);
-        }
-    };
 
     if (!user) {
         navigate("/");
@@ -88,19 +42,13 @@ const AdminProfile = () => {
 
                     {/* Profile Photo */}
                     <div className="flex justify-center mb-6">
-                        <label className="relative cursor-pointer group">
-                            <div className="w-32 h-32 rounded-3xl bg-muted flex items-center justify-center overflow-hidden border-4 border-border">
-                                {photoPreview ? (
-                                    <img src={photoPreview} alt="Profile" className="w-full h-full object-cover" />
-                                ) : (
-                                    <Shield className="w-16 h-16 text-muted-foreground" />
-                                )}
-                            </div>
-                            <div className="absolute inset-0 bg-black/50 rounded-3xl flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                <Camera className="w-8 h-8 text-white" />
-                            </div>
-                            <input type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} />
-                        </label>
+                        <div className="w-32 h-32 rounded-3xl bg-muted flex items-center justify-center overflow-hidden border-4 border-border">
+                            {photoPreview ? (
+                                <img src={photoPreview} alt="Profile" className="w-full h-full object-cover" />
+                            ) : (
+                                <Shield className="w-16 h-16 text-muted-foreground" />
+                            )}
+                        </div>
                     </div>
 
                     {/* Admin Info Cards */}

@@ -3,7 +3,7 @@ import StudentBottomNav from "@/components/StudentBottomNav";
 import { useUser } from "@/contexts/UserContext";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
-import { User, Mail, Phone, GraduationCap, Building2, LogOut, Camera, AlertCircle, Loader2 } from "lucide-react";
+import { User, Mail, Phone, GraduationCap, Building2, LogOut, AlertCircle, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/hooks/use-toast";
@@ -11,9 +11,8 @@ import { toast } from "@/hooks/use-toast";
 const StudentProfile = () => {
     const { user, logout, updateUser, refreshProfile } = useUser();
     const navigate = useNavigate();
-    const [photoPreview, setPhotoPreview] = useState<string | null>(user?.photo || null);
+    const [photoPreview] = useState<string | null>(user?.photo || null);
     const [isRefreshing, setIsRefreshing] = useState(false);
-    const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
     const handleLogout = () => {
         logout();
@@ -27,50 +26,7 @@ const StudentProfile = () => {
         setIsRefreshing(false);
     };
 
-    const handlePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file || !user) return;
 
-        // Show local preview immediately
-        const localPreview = URL.createObjectURL(file);
-        setPhotoPreview(localPreview);
-        setUploadingPhoto(true);
-
-        try {
-            const fileExt = file.name.split('.').pop();
-            const fileName = `${user.id}/avatar.${fileExt}`;
-
-            // Upload to Supabase Storage (avatars bucket)
-            const { error: uploadError } = await supabase.storage
-                .from('avatars')
-                .upload(fileName, file, { upsert: true });
-
-            if (uploadError) throw uploadError;
-
-            // Get the permanent public URL
-            const { data: { publicUrl } } = supabase.storage
-                .from('avatars')
-                .getPublicUrl(fileName);
-
-            // Persist the URL to the profiles table
-            const { error: dbError } = await supabase
-                .from('profiles')
-                .update({ photo_url: publicUrl })
-                .eq('id', user.id);
-
-            if (dbError) throw dbError;
-
-            setPhotoPreview(publicUrl);
-            toast({ title: "Photo Updated", description: "Your profile photo has been saved." });
-        } catch (error: any) {
-            console.error("Photo upload error:", error);
-            toast({ title: "Upload Failed", description: error.message, variant: "destructive" });
-            // Revert preview on failure
-            setPhotoPreview(user.photo || null);
-        } finally {
-            setUploadingPhoto(false);
-        }
-    };
 
     if (!user) {
         navigate("/");
@@ -85,29 +41,13 @@ const StudentProfile = () => {
 
                     {/* Profile Photo */}
                     <div className="flex justify-center mb-6">
-                        <label className="relative cursor-pointer group">
-                            <div className="w-32 h-32 rounded-3xl bg-muted flex items-center justify-center overflow-hidden border-4 border-border">
-                                {photoPreview ? (
-                                    <img src={photoPreview} alt="Profile" className="w-full h-full object-cover" />
-                                ) : (
-                                    <User className="w-16 h-16 text-muted-foreground" />
-                                )}
-                                {/* Upload overlay */}
-                                <div className="absolute inset-0 bg-black/40 rounded-3xl flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                    {uploadingPhoto
-                                        ? <Loader2 className="w-8 h-8 text-white animate-spin" />
-                                        : <Camera className="w-8 h-8 text-white" />
-                                    }
-                                </div>
-                            </div>
-                            <input
-                                type="file"
-                                accept="image/*"
-                                className="hidden"
-                                onChange={handlePhotoChange}
-                                disabled={uploadingPhoto}
-                            />
-                        </label>
+                        <div className="w-32 h-32 rounded-3xl bg-muted flex items-center justify-center overflow-hidden border-4 border-border">
+                            {photoPreview ? (
+                                <img src={photoPreview} alt="Profile" className="w-full h-full object-cover" />
+                            ) : (
+                                <User className="w-16 h-16 text-muted-foreground" />
+                            )}
+                        </div>
                     </div>
 
                     {/* User Info Cards */}
