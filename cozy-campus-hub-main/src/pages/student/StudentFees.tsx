@@ -3,7 +3,7 @@ import PageShell from "@/components/PageShell";
 import StudentBottomNav from "@/components/StudentBottomNav";
 import StatusBadge from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
-import { Upload, QrCode, Loader2, CheckCircle2, History, ArrowLeft } from "lucide-react";
+import { Upload, Loader2, History, ArrowLeft, Copy, CheckCircle2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useUser } from "@/contexts/UserContext";
 import { toast } from "@/hooks/use-toast";
@@ -205,17 +205,24 @@ const StudentFees = () => {
                       <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">Pay via UPI</h2>
 
                       <div className="bg-white rounded-2xl border border-border/50 p-5 text-center mb-6 shadow-sm">
-                        <div className="w-40 h-40 bg-gray-900 rounded-xl mx-auto mb-3 flex items-center justify-center relative overflow-hidden group">
-                          {/* Placeholder QR - In real app, use a real QR image */}
-                          <QrCode className="w-20 h-20 text-white opacity-20" />
-                          <div className="absolute inset-0 flex items-center justify-center text-white/50 text-xs">
-                            Scan to Pay
-                          </div>
-                        </div>
-                        <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">UPI ID</p>
-                        <div className="bg-muted inline-block px-3 py-1 rounded-lg mt-1 font-mono text-sm font-medium select-all">
-                          mess@upi
-                        </div>
+                        {/* PhonePe QR Code */}
+                        <img
+                          src="/phonepe-qr.png"
+                          alt="PhonePe QR Code - Akshay Anil Patil"
+                          className="w-48 h-auto mx-auto mb-3 rounded-xl"
+                        />
+                        <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold mb-1">UPI ID</p>
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText('9359447581@ibl');
+                            toast({ title: "UPI ID Copied!", description: "9359447581@ibl" });
+                          }}
+                          className="bg-muted hover:bg-muted/70 active:scale-95 transition-all inline-flex items-center gap-2 px-3 py-1.5 rounded-lg mt-1 font-mono text-sm font-medium"
+                        >
+                          9359447581@ibl
+                          <Copy className="w-3.5 h-3.5 text-muted-foreground" />
+                        </button>
+                        <p className="text-xs text-muted-foreground mt-2">Tap the UPI ID to copy</p>
                       </div>
 
                       <div className="bg-card rounded-2xl border border-border p-6 text-center">
