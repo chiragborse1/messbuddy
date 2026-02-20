@@ -8,7 +8,7 @@ const config: CapacitorConfig = {
     // ✅ LIVE UPDATE: Loads from Vercel — no APK update needed for web changes
     // Replace with your actual Vercel URL below:
     server: {
-        url: 'https://messbuddy.vercel.app', // ← replace with your actual Vercel URL
+        url: 'https://messbuddy-ten.vercel.app/', // ← replace with your actual Vercel URL
         cleartext: false, // HTTPS only
         androidScheme: 'https',
     },
