@@ -10,8 +10,8 @@ import { toast } from "@/hooks/use-toast";
 
 const plans = [
   { id: 1, label: "1 Day Trial", price: 120, desc: "Single day access" },
-  { id: 2, label: "Boys Monthly", price: 2200, desc: "30 days unlimited meals" },
-  { id: 3, label: "Girls Monthly", price: 1600, desc: "30 days unlimited meals" },
+  { id: 2, label: "Boys Monthly", price: 2200, desc: "" },
+  { id: 3, label: "Girls Monthly", price: 1600, desc: "" },
 ];
 
 const StudentFees = () => {
