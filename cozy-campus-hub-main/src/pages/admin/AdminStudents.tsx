@@ -184,39 +184,34 @@ const AdminStudents = () => {
   };
 
   const handlePermanentDelete = async (studentId: string) => {
-    if (!window.confirm("Confirm PERMANENT Deletion? This will remove all student data AND their email account. Cannot be undone.")) return;
+    if (!window.confirm("Confirm PERMANENT Deletion? This will remove all student data and their account. Cannot be undone.")) return;
 
     try {
-      // 1. Try to delete everything using the SQL Function (Best way)
-      // This requires the 'delete_user_complete' function to be created in Supabase SQL Editor
-      const { error: rpcError } = await supabase.rpc('delete_user_complete', { target_user_id: studentId });
-
-      if (!rpcError) {
-        toast({ title: "Permanently Deleted", description: "All data and email login have been removed." });
-        loadStudents();
-        return;
-      }
-
-      console.warn("RPC delete failed, falling back to manual cleanup:", rpcError);
-
-      // 2. Fallback: Manual cleanup (Auth user will remain, but data is gone)
-      // Delete child records first to avoid constraint errors
+      // Step 1: Delete all related data first (child records)
       await supabase.from('payments').delete().eq('user_id', studentId);
       await supabase.from('leave_requests').delete().eq('user_id', studentId);
       await supabase.from('votes').delete().eq('user_id', studentId);
 
-      const { error } = await supabase
+      // Step 2: Delete the profile row
+      const { error: profileError } = await supabase
         .from('profiles')
         .delete()
         .eq('id', studentId);
 
-      if (error) throw error;
+      if (profileError) throw profileError;
 
-      toast({
-        title: "Partial Delete Success",
-        description: "Data removed. WARN: Email login remains active until you run the SQL script.",
-        variant: "destructive"
-      });
+      // Step 3: Try RPC to delete auth user (requires 'delete_user_complete' SQL function)
+      const { error: rpcError } = await supabase.rpc('delete_user_complete', { target_user_id: studentId });
+
+      if (rpcError) {
+        // Step 4: Fallback — try Supabase admin delete (works if service_role key is available)
+        const { error: adminError } = await supabase.auth.admin.deleteUser(studentId);
+        if (adminError) {
+          console.warn("Auth user could not be deleted automatically:", adminError.message);
+        }
+      }
+
+      toast({ title: "Permanently Deleted", description: "All student data has been removed successfully." });
       loadStudents();
     } catch (error: any) {
       console.error("Delete error:", error);

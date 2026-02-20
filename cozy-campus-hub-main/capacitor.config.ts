@@ -5,18 +5,38 @@ const config: CapacitorConfig = {
     appName: 'Kanhaiya Mess',
     webDir: 'dist',
 
-    // LIVE UPDATE MODE (recommended for production):
-    // Uncomment the server block below after deploying to Vercel/Netlify.
-    // This lets you push updates without releasing a new APK.
-    //
-    // server: {
-    //   url: 'https://messbuddy.vercel.app',
-    //   cleartext: false,
-    // },
+    // ✅ LIVE UPDATE: Loads from Vercel — no APK update needed for web changes
+    // Replace with your actual Vercel URL below:
+    server: {
+        url: 'https://messbuddy.vercel.app', // ← replace with your actual Vercel URL
+        cleartext: false, // HTTPS only
+        androidScheme: 'https',
+    },
 
     android: {
         buildOptions: {
             releaseType: 'APK',
+        },
+        // WebView performance optimizations
+        allowMixedContent: false,
+        captureInput: true,
+        webContentsDebuggingEnabled: false, // set true only during dev
+    },
+
+    plugins: {
+        SplashScreen: {
+            launchShowDuration: 2000,
+            launchAutoHide: true,
+            backgroundColor: '#ffffff',
+            androidSplashResourceName: 'splash',
+            showSpinner: false,
+            androidScaleType: 'CENTER_CROP',
+            splashFullScreen: true,
+            splashImmersive: true,
+        },
+        StatusBar: {
+            style: 'DEFAULT',
+            backgroundColor: '#ffffff',
         },
     },
 };
