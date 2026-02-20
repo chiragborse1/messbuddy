@@ -204,7 +204,7 @@ const StudentFees = () => {
                     <div className="pt-4 border-t border-dashed border-border/50">
                       <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">Pay via UPI</h2>
 
-                      <div className="bg-white rounded-2xl border border-border/50 p-5 text-center mb-6 shadow-sm">
+                      <div className="bg-white rounded-2xl border border-border/50 p-5 text-center mb-4 shadow-sm">
                         {/* PhonePe QR Code */}
                         <img
                           src="/Mess QR.jpeg"
@@ -222,8 +222,100 @@ const StudentFees = () => {
                           9359447581@ibl
                           <Copy className="w-3.5 h-3.5 text-muted-foreground" />
                         </button>
-                        <p className="text-xs text-muted-foreground mt-2">Tap the UPI ID to copy</p>
+                        <p className="text-xs text-muted-foreground mt-2">Tap UPI ID to copy · Scan QR with any app</p>
                       </div>
+
+                      {/* Pay via App Buttons */}
+                      {(() => {
+                        const plan = plans.find(p => p.id === selectedPlanId);
+                        const upiParams = `pa=9359447581@ibl&pn=Akshay+Anil+Patil&am=${plan?.price}&cu=INR&tn=${encodeURIComponent(plan?.label ?? 'Mess Plan')}`;
+                        const upiApps = [
+                          {
+                            name: "Google Pay",
+                            url: `gpay://upi/pay?${upiParams}`,
+                            fallback: `upi://pay?${upiParams}`,
+                            bg: "bg-white border border-gray-200",
+                            icon: (
+                              <svg viewBox="0 0 48 48" className="w-7 h-7">
+                                <path fill="#4285F4" d="M24 9.5c3.5 0 6.6 1.2 9 3.2l6.7-6.7C35.9 2.3 30.3 0 24 0 14.6 0 6.6 5.5 2.7 13.5l7.8 6C12.5 13.2 17.8 9.5 24 9.5z" />
+                                <path fill="#34A853" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v8.5h12.7c-.5 3-2.2 5.5-4.7 7.2l7.3 5.7c4.3-4 6.2-9.9 7.2-16.9z" />
+                                <path fill="#FBBC04" d="M10.5 28.5c-.5-1.5-.8-3-.8-4.5s.3-3 .8-4.5l-7.8-6C1 16.6 0 20.2 0 24s1 7.4 2.7 10.5l7.8-6z" />
+                                <path fill="#EA4335" d="M24 48c6.3 0 11.6-2.1 15.4-5.7l-7.3-5.7c-2.1 1.4-4.8 2.3-8.1 2.3-6.2 0-11.5-3.7-13.5-9l-7.8 6C6.6 42.5 14.6 48 24 48z" />
+                              </svg>
+                            ),
+                          },
+                          {
+                            name: "PhonePe",
+                            url: `phonepe://pay?${upiParams}`,
+                            fallback: `upi://pay?${upiParams}`,
+                            bg: "bg-[#5f259f]",
+                            textColor: "text-white",
+                            icon: (
+                              <svg viewBox="0 0 48 48" className="w-7 h-7" fill="white">
+                                <circle cx="24" cy="24" r="24" fill="#5f259f" />
+                                <text x="50%" y="55%" dominantBaseline="middle" textAnchor="middle" fontSize="22" fontWeight="bold" fill="white">Pe</text>
+                              </svg>
+                            ),
+                          },
+                          {
+                            name: "Paytm",
+                            url: `paytmmp://pay?${upiParams}`,
+                            fallback: `upi://pay?${upiParams}`,
+                            bg: "bg-[#00BAF2]",
+                            textColor: "text-white",
+                            icon: (
+                              <svg viewBox="0 0 48 48" className="w-7 h-7">
+                                <circle cx="24" cy="24" r="24" fill="#00BAF2" />
+                                <text x="50%" y="55%" dominantBaseline="middle" textAnchor="middle" fontSize="13" fontWeight="bold" fill="white">PAY</text>
+                              </svg>
+                            ),
+                          },
+                          {
+                            name: "Other UPI",
+                            url: `upi://pay?${upiParams}`,
+                            fallback: `upi://pay?${upiParams}`,
+                            bg: "bg-secondary",
+                            textColor: "text-foreground",
+                            icon: (
+                              <svg viewBox="0 0 48 48" className="w-7 h-7">
+                                <circle cx="24" cy="24" r="24" fill="#eee" />
+                                <text x="50%" y="55%" dominantBaseline="middle" textAnchor="middle" fontSize="11" fontWeight="bold" fill="#333">UPI</text>
+                              </svg>
+                            ),
+                          },
+                        ];
+                        return (
+                          <div className="mb-4">
+                            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 text-center">
+                              Or open app directly — ₹{plan?.price} auto-filled
+                            </p>
+                            <div className="grid grid-cols-4 gap-2">
+                              {upiApps.map((app) => (
+                                <button
+                                  key={app.name}
+                                  onClick={() => {
+                                    // Try deep link, fallback to generic UPI
+                                    const link = document.createElement('a');
+                                    link.href = app.url;
+                                    link.click();
+                                    // Fallback after 1.5s if app not installed
+                                    setTimeout(() => {
+                                      window.location.href = app.fallback;
+                                    }, 1500);
+                                  }}
+                                  className={`flex flex-col items-center gap-1.5 p-2.5 rounded-2xl ${app.bg} active:scale-95 transition-all shadow-sm`}
+                                >
+                                  {app.icon}
+                                  <span className={`text-[10px] font-semibold ${app.textColor ?? 'text-foreground'} leading-tight text-center`}>
+                                    {app.name}
+                                  </span>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })()}
+
 
                       <div className="bg-card rounded-2xl border border-border p-6 text-center">
                         {uploading ? (
