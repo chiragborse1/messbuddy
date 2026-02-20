@@ -1,5 +1,6 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
+import { QRCodeSVG } from "qrcode.react";
 
 // --- SVG Icons ---
 
@@ -31,45 +32,6 @@ const DashedLine = () => (
     <div className="w-full border-t-2 border-dashed border-border" aria-hidden="true" />
 );
 
-const Barcode = ({ value }: { value: string }) => {
-    const hashCode = (s: string) =>
-        s.split("").reduce((a, b) => {
-            a = (a << 5) - a + b.charCodeAt(0);
-            return a & a;
-        }, 0);
-    const seed = hashCode(value);
-    const random = (s: number) => {
-        const x = Math.sin(s) * 10000;
-        return x - Math.floor(x);
-    };
-    const bars = Array.from({ length: 60 }).map((_, i) => ({
-        width: random(seed + i) > 0.7 ? 2.5 : 1.5,
-    }));
-    const spacing = 1.5;
-    const totalWidth = bars.reduce((acc, bar) => acc + bar.width + spacing, 0) - spacing;
-    const svgWidth = 250;
-    const svgHeight = 70;
-    let currentX = (svgWidth - totalWidth) / 2;
-    return (
-        <div className="flex flex-col items-center py-2">
-            <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width={svgWidth}
-                height={svgHeight}
-                viewBox={`0 0 ${svgWidth} ${svgHeight}`}
-                aria-label={`Barcode for ${value}`}
-                className="fill-current text-foreground"
-            >
-                {bars.map((bar, i) => {
-                    const x = currentX;
-                    currentX += bar.width + spacing;
-                    return <rect key={i} x={x} y="10" width={bar.width} height="50" />;
-                })}
-            </svg>
-            <p className="text-xs text-muted-foreground tracking-[0.2em] mt-2 font-mono">{value}</p>
-        </div>
-    );
-};
 
 const ConfettiExplosion = () => {
     const colors = ["#ef4444", "#3b82f6", "#22c55e", "#eab308", "#8b5cf6", "#f97316"];
@@ -103,19 +65,19 @@ const ConfettiExplosion = () => {
 // --- Main Ticket Props ---
 
 export interface MessReceiptProps extends React.HTMLAttributes<HTMLDivElement> {
-    receiptId: string;       // Short payment ID
-    planName: string;        // e.g. "Boys Monthly"
-    amount: number;          // e.g. 2200
-    studentName: string;     // Student's name
-    upiId: string;           // UPI ID used for payment
-    paymentDate: Date;       // Date of payment submission
-    barcodeValue: string;    // Full payment UUID as barcode
+    receiptId: string;
+    planName: string;
+    amount: number;
+    studentName: string;
+    upiId: string;
+    paymentDate: Date;
+    screenshotUrl?: string;   // Encoded in QR code
     showConfetti?: boolean;
 }
 
 const MessReceiptTicket = React.forwardRef<HTMLDivElement, MessReceiptProps>(
     (
-        { className, receiptId, planName, amount, studentName, upiId, paymentDate, barcodeValue, showConfetti = true, ...props },
+        { className, receiptId, planName, amount, studentName, upiId, paymentDate, screenshotUrl, showConfetti = true, ...props },
         ref
     ) => {
         const [confettiActive, setConfettiActive] = React.useState(false);
@@ -209,8 +171,19 @@ const MessReceiptTicket = React.forwardRef<HTMLDivElement, MessReceiptProps>(
 
                         <DashedLine />
 
-                        {/* Barcode */}
-                        <Barcode value={barcodeValue} />
+                        {/* QR Code */}
+                        <div className="flex flex-col items-center gap-2 py-1">
+                            <QRCodeSVG
+                                value={screenshotUrl || `Receipt-${receiptId}`}
+                                size={120}
+                                level="M"
+                                includeMargin={true}
+                                className="rounded-lg"
+                            />
+                            <p className="text-[10px] text-muted-foreground text-center">
+                                {screenshotUrl ? 'Scan to view payment screenshot' : `Receipt: ${receiptId}`}
+                            </p>
+                        </div>
 
                         {/* Footer note */}
                         <p className="text-center text-[10px] text-muted-foreground">

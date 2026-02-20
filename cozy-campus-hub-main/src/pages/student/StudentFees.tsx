@@ -249,6 +249,41 @@ const StudentFees = () => {
                     </div>
                   </div>
 
+                  {/* Recent Activity */}
+                  {myPayments.length > 0 && (
+                    <div>
+                      <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">Recent Activity</h2>
+                      <div className="space-y-2">
+                        {myPayments.slice(0, 3).map((p) => (
+                          <div
+                            key={p.id}
+                            onClick={() => p.status === 'approved' && handleDownloadReceipt(p)}
+                            className={`flex items-center justify-between p-3 rounded-xl border border-border/40 bg-card shadow-sm ${p.status === 'approved' ? 'cursor-pointer hover:border-green-300 hover:bg-green-50/30 transition-colors' : ''}`}
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 text-sm ${p.status === 'approved' ? 'bg-green-100 text-green-700' :
+                                p.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
+                                  'bg-red-100 text-red-700'
+                                }`}>
+                                {p.status === 'approved' ? '✓' : p.status === 'pending' ? '⏳' : '✕'}
+                              </div>
+                              <div>
+                                <p className="text-sm font-medium leading-tight">{p.plan_name}</p>
+                                <p className="text-xs text-muted-foreground">{new Date(p.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-sm font-bold">₹{p.amount}</p>
+                              {p.status === 'approved' && (
+                                <p className="text-[10px] text-green-600 font-medium">Tap for receipt</p>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Payment Section */}
                   {selectedPlanId && (
                     <div className="pt-4 border-t border-dashed border-border/50">
@@ -436,7 +471,7 @@ const StudentFees = () => {
               studentName={user?.name ?? "Student"}
               upiId="9359447581@ibl"
               paymentDate={new Date(receiptPayment.created_at)}
-              barcodeValue={String(receiptPayment.id).padStart(16, '0')}
+              screenshotUrl={receiptPayment.screenshot_url}
               showConfetti={true}
             />
           </div>
