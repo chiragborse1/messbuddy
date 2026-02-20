@@ -207,7 +207,7 @@ const StudentFees = () => {
                       <div className="bg-white rounded-2xl border border-border/50 p-5 text-center mb-6 shadow-sm">
                         {/* PhonePe QR Code */}
                         <img
-                          src="/phonepe-qr.png"
+                          src="/Mess QR.jpeg"
                           alt="PhonePe QR Code - Akshay Anil Patil"
                           className="w-48 h-auto mx-auto mb-3 rounded-xl"
                         />
