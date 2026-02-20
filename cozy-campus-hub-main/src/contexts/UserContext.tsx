@@ -10,7 +10,7 @@ export interface UserData {
     college: string;
     course: string;
     photo?: string;
-    role: "student" | "admin";
+    role: "student" | "admin" | "developer";
     status?: "active" | "pending" | "expired" | "approved" | "rejected" | "on-leave" | "suspended" | string;
     daysRemaining?: number; // Calculated or stored
     plan?: string;

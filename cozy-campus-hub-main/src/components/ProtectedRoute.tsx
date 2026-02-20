@@ -9,30 +9,32 @@ interface ProtectedRouteProps {
 
 /**
  * Wraps a route and enforces role-based access.
- * - Loading  → spinner (no blank flash)
+ * - Loading    → spinner (no blank screen flash)
  * - Not logged in → redirect to /
- * - Wrong role → redirect to their own dashboard
- * - Correct role → render children
+ * - Admin routes → allow 'admin' and 'developer' roles
+ * - Student routes → allow 'student' role only
  */
 const ProtectedRoute = ({ children, requiredRole }: ProtectedRouteProps) => {
     const { user, loading } = useUser();
 
-    // Show spinner while session resolves — prevents blank screen flash
     if (loading) return (
         <div className="min-h-screen flex items-center justify-center">
             <Loader2 className="w-8 h-8 animate-spin text-primary" />
         </div>
     );
 
-    // Not authenticated → back to login
     if (!user) return <Navigate to="/" replace />;
 
-    // Authenticated but wrong role → redirect to their dashboard
-    // Treat 'developer' as 'admin' for access purposes
-    const effectiveRole = user.role === "developer" ? "admin" : user.role;
-    if (effectiveRole !== requiredRole) {
-        const redirectTo = effectiveRole === "admin" ? "/admin" : "/student";
-        return <Navigate to={redirectTo} replace />;
+    // Both 'admin' and 'developer' roles can access admin routes
+    const hasAdminAccess = user.role === "admin" || user.role === "developer";
+    const hasStudentAccess = user.role === "student";
+
+    if (requiredRole === "admin" && !hasAdminAccess) {
+        return <Navigate to="/student" replace />;
+    }
+
+    if (requiredRole === "student" && !hasStudentAccess) {
+        return <Navigate to="/admin" replace />;
     }
 
     return <>{children}</>;
