@@ -81,8 +81,16 @@ const SignupPage = () => {
 
       if (error) throw error;
 
-      // Photo will be uploaded after email is verified & admin approves.
-      // We can't upload to storage before the auth session is confirmed.
+      // Store photo in localStorage so AuthCallback can upload it after email verification
+      if (photoFile && data.user) {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          localStorage.setItem(`pending_avatar_${data.user!.id}`, reader.result as string);
+          localStorage.setItem(`pending_avatar_ext_${data.user!.id}`, (photoFile.name.split('.').pop() || 'jpg'));
+        };
+        reader.readAsDataURL(photoFile);
+      }
+
       setSubmitted(true);
     } catch (error: any) {
       console.error(error);

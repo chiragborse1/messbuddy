@@ -66,6 +66,16 @@ const AdminLeaves = () => {
 
       if (error) throw error;
 
+      // Auto-update on_leave status in profile
+      if (status === 'approved') {
+        const request = requests.find(r => r.id === id);
+        if (request?.reason?.startsWith('[LEAVE]')) {
+          await supabase.from('profiles').update({ on_leave: true }).eq('id', request.user_id);
+        } else if (request?.reason?.startsWith('[RETURN]')) {
+          await supabase.from('profiles').update({ on_leave: false }).eq('id', request.user_id);
+        }
+      }
+
       // Logic to extend plan if this is a RETURN approval
       if (status === 'approved') {
         const request = requests.find(r => r.id === id);

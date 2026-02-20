@@ -99,6 +99,25 @@ const LoginPage = () => {
     }
   };
 
+  const handleForgotPassword = async () => {
+    if (!credentials.email) {
+      toast({ title: "Enter your email first", description: "Type your email address above, then click Forgot Password.", variant: "destructive" });
+      return;
+    }
+    setLoading(true);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(credentials.email, {
+        redirectTo: `${window.location.origin}/auth/callback`,
+      });
+      if (error) throw error;
+      toast({ title: "Reset email sent! 📬", description: "Check your inbox for a password reset link." });
+    } catch (error: any) {
+      toast({ title: "Failed to send", description: error.message, variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-6">
       <div className="w-full max-w-sm animate-fade-in">
@@ -164,6 +183,15 @@ const LoginPage = () => {
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
               >
                 {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+              </button>
+            </div>
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={handleForgotPassword}
+                className="text-xs text-muted-foreground hover:text-primary transition-colors mt-1"
+              >
+                Forgot password?
               </button>
             </div>
           </div>

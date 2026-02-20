@@ -43,12 +43,12 @@ const StudentLeave = () => {
     if (user) {
       fetchRequests();
 
-      // Realtime Listener
+      // Realtime Listener — filtered to this user only
       const channel = supabase
         .channel('student_leaves_changes')
         .on(
           'postgres_changes',
-          { event: '*', schema: 'public', table: 'leave_requests' },
+          { event: '*', schema: 'public', table: 'leave_requests', filter: `user_id=eq.${user.id}` },
           () => fetchRequests()
         )
         .subscribe();
@@ -103,7 +103,7 @@ const StudentLeave = () => {
 
   const [showHistory, setShowHistory] = useState(false);
 
-  // ... (keep useEffects/handlers)
+
 
   return (
     <>

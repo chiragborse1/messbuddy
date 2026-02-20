@@ -1,29 +1,70 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
-import { CheckCircle2, Loader2, XCircle } from "lucide-react";
+import { CheckCircle2, Loader2, XCircle, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { toast } from "@/hooks/use-toast";
+
+// Helper: base64 data URL → Blob
+const dataURLtoBlob = (dataUrl: string): Blob => {
+    const [header, base64] = dataUrl.split(",");
+    const mimeString = header.split(":")[1].split(";")[0];
+    const byteString = atob(base64);
+    const ab = new ArrayBuffer(byteString.length);
+    const ia = new Uint8Array(ab);
+    for (let i = 0; i < byteString.length; i++) ia[i] = byteString.charCodeAt(i);
+    return new Blob([ab], { type: mimeString });
+};
+
+// Upload pending profile photo stored during signup
+const uploadPendingAvatar = async (userId: string) => {
+    const pendingPhoto = localStorage.getItem(`pending_avatar_${userId}`);
+    const ext = localStorage.getItem(`pending_avatar_ext_${userId}`) || "jpg";
+    if (!pendingPhoto) return;
+    try {
+        const blob = dataURLtoBlob(pendingPhoto);
+        const filePath = `${userId}.${ext}`;
+        const { error } = await supabase.storage.from("avatars").upload(filePath, blob, { upsert: true });
+        if (!error) {
+            const { data } = supabase.storage.from("avatars").getPublicUrl(filePath);
+            await supabase.from("profiles").update({ photo_url: data.publicUrl }).eq("id", userId);
+        }
+        localStorage.removeItem(`pending_avatar_${userId}`);
+        localStorage.removeItem(`pending_avatar_ext_${userId}`);
+    } catch (err) {
+        console.warn("Pending avatar upload failed:", err);
+    }
+};
 
 const AuthCallback = () => {
     const navigate = useNavigate();
-    const [status, setStatus] = useState<"loading" | "success" | "error">("loading");
+    const [status, setStatus] = useState<"loading" | "success" | "error" | "reset_password">("loading");
     const [errorMsg, setErrorMsg] = useState("");
+    // Password reset state
+    const [newPassword, setNewPassword] = useState("");
+    const [showPw, setShowPw] = useState(false);
+    const [resetting, setResetting] = useState(false);
 
     useEffect(() => {
-        // Supabase automatically exchanges the token from the URL hash.
-        // We listen for the auth state change to confirm it worked.
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-            if (event === "SIGNED_IN" && session) {
-                // Sign them out so they go through the normal login flow
-                await supabase.auth.signOut();
-                setStatus("success");
-            } else if (event === "TOKEN_REFRESHED") {
+            if (event === "PASSWORD_RECOVERY") {
+                // Show the set-new-password form (session is active)
+                setStatus("reset_password");
+                return;
+            }
+
+            if ((event === "SIGNED_IN" || event === "TOKEN_REFRESHED") && session) {
+                // Upload pending profile photo if stored during signup
+                await uploadPendingAvatar(session.user.id);
+                // Sign out so student goes through normal login
                 await supabase.auth.signOut();
                 setStatus("success");
             }
         });
 
-        // Also handle the case where the URL has an error (e.g. expired link)
+        // Handle URL errors (expired / invalid link)
         const hash = window.location.hash;
         if (hash.includes("error=")) {
             const params = new URLSearchParams(hash.replace("#", "?"));
@@ -31,18 +72,41 @@ const AuthCallback = () => {
             setStatus("error");
         }
 
-        // Fallback: if no event fires after 5s, show error
+        // Fallback timeout
         const timeout = setTimeout(() => {
-            setStatus((prev) => (prev === "loading" ? "error" : prev));
-            setErrorMsg("Verification timed out. The link may have expired. Please try signing up again.");
-        }, 5000);
+            setStatus((prev) => {
+                if (prev === "loading") {
+                    setErrorMsg("Verification timed out. The link may have expired. Please try again.");
+                    return "error";
+                }
+                return prev;
+            });
+        }, 6000);
 
-        return () => {
-            subscription.unsubscribe();
-            clearTimeout(timeout);
-        };
+        return () => { subscription.unsubscribe(); clearTimeout(timeout); };
     }, []);
 
+    const handlePasswordReset = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (newPassword.length < 6) {
+            toast({ title: "Too short", description: "Password must be at least 6 characters.", variant: "destructive" });
+            return;
+        }
+        setResetting(true);
+        try {
+            const { error } = await supabase.auth.updateUser({ password: newPassword });
+            if (error) throw error;
+            await supabase.auth.signOut();
+            toast({ title: "Password Updated! ✅", description: "You can now log in with your new password." });
+            navigate("/");
+        } catch (err: any) {
+            toast({ title: "Reset Failed", description: err.message, variant: "destructive" });
+        } finally {
+            setResetting(false);
+        }
+    };
+
+    // Loading
     if (status === "loading") {
         return (
             <div className="min-h-screen flex flex-col items-center justify-center px-6">
@@ -52,6 +116,7 @@ const AuthCallback = () => {
         );
     }
 
+    // Error
     if (status === "error") {
         return (
             <div className="min-h-screen flex flex-col items-center justify-center px-6 text-center">
@@ -69,6 +134,51 @@ const AuthCallback = () => {
         );
     }
 
+    // Password Reset Form
+    if (status === "reset_password") {
+        return (
+            <div className="min-h-screen flex flex-col items-center justify-center px-6">
+                <div className="w-full max-w-sm">
+                    <div className="text-center mb-8">
+                        <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
+                            <CheckCircle2 className="w-8 h-8 text-primary" />
+                        </div>
+                        <h2 className="text-2xl font-bold">Set New Password</h2>
+                        <p className="text-sm text-muted-foreground mt-1">Enter your new password below</p>
+                    </div>
+                    <form onSubmit={handlePasswordReset} className="space-y-4">
+                        <div className="space-y-2">
+                            <Label>New Password</Label>
+                            <div className="relative">
+                                <Input
+                                    type={showPw ? "text" : "password"}
+                                    placeholder="Minimum 6 characters"
+                                    className="h-12 rounded-xl pr-12"
+                                    value={newPassword}
+                                    onChange={(e) => setNewPassword(e.target.value)}
+                                    required
+                                    minLength={6}
+                                    autoFocus
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => setShowPw(!showPw)}
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                                >
+                                    {showPw ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                                </button>
+                            </div>
+                        </div>
+                        <Button type="submit" className="w-full h-12 rounded-xl font-semibold" disabled={resetting}>
+                            {resetting ? <Loader2 className="w-5 h-5 animate-spin" /> : "Update Password"}
+                        </Button>
+                    </form>
+                </div>
+            </div>
+        );
+    }
+
+    // Success
     return (
         <div className="min-h-screen flex flex-col items-center justify-center px-6 text-center animate-fade-in">
             <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center mb-6">
