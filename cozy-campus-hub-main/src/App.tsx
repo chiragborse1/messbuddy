@@ -5,6 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { UserProvider } from "@/contexts/UserContext";
+import ProtectedRoute from "@/components/ProtectedRoute";
 import LoginPage from "./pages/LoginPage";
 import SignupPage from "./pages/SignupPage";
 import StudentDashboard from "./pages/student/StudentDashboard";
@@ -42,25 +43,25 @@ const App = () => (
               <Route path="/signup" element={<SignupPage />} />
               <Route path="/auth/callback" element={<AuthCallback />} />
 
-              {/* Student Routes */}
-              <Route path="/student" element={<StudentDashboard />} />
-              <Route path="/student/menu" element={<StudentMenu />} />
-              <Route path="/student/fees" element={<StudentFees />} />
-              <Route path="/student/leave" element={<StudentLeave />} />
-              <Route path="/student/help" element={<StudentHelp />} />
-              <Route path="/student/profile" element={<StudentProfile />} />
-              <Route path="/student/feedback" element={<StudentFeedback />} />
-              <Route path="/student/chat" element={<StudentChat />} />
+              {/* Student Routes — requires role: student */}
+              <Route path="/student" element={<ProtectedRoute requiredRole="student"><StudentDashboard /></ProtectedRoute>} />
+              <Route path="/student/menu" element={<ProtectedRoute requiredRole="student"><StudentMenu /></ProtectedRoute>} />
+              <Route path="/student/fees" element={<ProtectedRoute requiredRole="student"><StudentFees /></ProtectedRoute>} />
+              <Route path="/student/leave" element={<ProtectedRoute requiredRole="student"><StudentLeave /></ProtectedRoute>} />
+              <Route path="/student/help" element={<ProtectedRoute requiredRole="student"><StudentHelp /></ProtectedRoute>} />
+              <Route path="/student/profile" element={<ProtectedRoute requiredRole="student"><StudentProfile /></ProtectedRoute>} />
+              <Route path="/student/feedback" element={<ProtectedRoute requiredRole="student"><StudentFeedback /></ProtectedRoute>} />
+              <Route path="/student/chat" element={<ProtectedRoute requiredRole="student"><StudentChat /></ProtectedRoute>} />
 
-              {/* Admin Routes */}
-              <Route path="/admin" element={<AdminDashboard />} />
-              <Route path="/admin/students" element={<AdminStudents />} />
-              <Route path="/admin/menu" element={<AdminMenu />} />
-              <Route path="/admin/payments" element={<AdminPayments />} />
-              <Route path="/admin/leaves" element={<AdminLeaves />} />
-              <Route path="/admin/analytics" element={<AdminAnalytics />} />
-              <Route path="/admin/chat" element={<AdminChat />} />
-              <Route path="/admin/profile" element={<AdminProfile />} />
+              {/* Admin Routes — requires role: admin */}
+              <Route path="/admin" element={<ProtectedRoute requiredRole="admin"><AdminDashboard /></ProtectedRoute>} />
+              <Route path="/admin/students" element={<ProtectedRoute requiredRole="admin"><AdminStudents /></ProtectedRoute>} />
+              <Route path="/admin/menu" element={<ProtectedRoute requiredRole="admin"><AdminMenu /></ProtectedRoute>} />
+              <Route path="/admin/payments" element={<ProtectedRoute requiredRole="admin"><AdminPayments /></ProtectedRoute>} />
+              <Route path="/admin/leaves" element={<ProtectedRoute requiredRole="admin"><AdminLeaves /></ProtectedRoute>} />
+              <Route path="/admin/analytics" element={<ProtectedRoute requiredRole="admin"><AdminAnalytics /></ProtectedRoute>} />
+              <Route path="/admin/chat" element={<ProtectedRoute requiredRole="admin"><AdminChat /></ProtectedRoute>} />
+              <Route path="/admin/profile" element={<ProtectedRoute requiredRole="admin"><AdminProfile /></ProtectedRoute>} />
 
               <Route path="*" element={<NotFound />} />
             </Routes>
