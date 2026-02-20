@@ -28,8 +28,10 @@ const ProtectedRoute = ({ children, requiredRole }: ProtectedRouteProps) => {
     if (!user) return <Navigate to="/" replace />;
 
     // Authenticated but wrong role → redirect to their dashboard
-    if (user.role !== requiredRole) {
-        const redirectTo = user.role === "admin" ? "/admin" : "/student";
+    // Treat 'developer' as 'admin' for access purposes
+    const effectiveRole = user.role === "developer" ? "admin" : user.role;
+    if (effectiveRole !== requiredRole) {
+        const redirectTo = effectiveRole === "admin" ? "/admin" : "/student";
         return <Navigate to={redirectTo} replace />;
     }
 
