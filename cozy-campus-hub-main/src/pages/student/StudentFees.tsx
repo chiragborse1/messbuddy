@@ -154,7 +154,7 @@ const StudentFees = () => {
     }
   };
 
-  // ... (keep existing useEffects and handlers)
+
 
   const pendingPayment = myPayments.find(p => p.status === 'pending');
 

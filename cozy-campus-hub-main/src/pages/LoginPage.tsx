@@ -64,6 +64,7 @@ const LoginPage = () => {
               description: "Your account is awaiting admin approval.",
               variant: "destructive",
             });
+            return; // Stop execution — don't navigate anywhere
           } else if (profile.status === "rejected" || profile.status === "suspended") {
             await supabase.auth.signOut();
             toast({

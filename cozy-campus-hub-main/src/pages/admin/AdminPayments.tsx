@@ -155,10 +155,10 @@ const AdminPayments = () => {
         const currentEndDate = new Date(profile.plan_end_date);
 
         if (isMonthly) {
-          // Remove one month's worth of days
+          // Remove one month's worth of days (getMonth()+1 gives current month's day count)
           const daysInMonth = new Date(
             currentEndDate.getFullYear(),
-            currentEndDate.getMonth(),
+            currentEndDate.getMonth() + 1,
             0
           ).getDate();
           currentEndDate.setDate(currentEndDate.getDate() - daysInMonth);
