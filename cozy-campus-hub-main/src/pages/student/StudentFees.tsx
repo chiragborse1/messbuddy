@@ -119,33 +119,39 @@ const StudentFees = () => {
 
   const [showHistory, setShowHistory] = useState(false);
 
-  const handleDownloadReceipt = async (payment: any) => {
+  const handleDownloadReceipt = (payment: any) => {
     setReceiptPayment(payment);
-    // Wait for modal to render, then capture
-    setTimeout(async () => {
-      if (!receiptRef.current) return;
-      setDownloadingPdf(true);
-      try {
-        const html2canvas = (await import('html2canvas')).default;
-        const jsPDF = (await import('jspdf')).default;
-        const canvas = await html2canvas(receiptRef.current, {
-          scale: 2,
-          backgroundColor: '#ffffff',
-          useCORS: true,
-        });
-        const imgData = canvas.toDataURL('image/png');
-        const pdf = new jsPDF({ orientation: 'portrait', unit: 'px', format: [canvas.width / 2, canvas.height / 2] });
-        pdf.addImage(imgData, 'PNG', 0, 0, canvas.width / 2, canvas.height / 2);
-        pdf.save(`Receipt-${payment.plan_name}-${payment.id.slice(0, 8)}.pdf`);
-        toast({ title: "Receipt Downloaded! 🎉" });
-      } catch (err) {
-        console.error(err);
-        toast({ title: "Download failed", variant: "destructive" });
-      } finally {
-        setDownloadingPdf(false);
-        setReceiptPayment(null);
-      }
-    }, 600);
+  };
+
+  const handleSavePdf = async () => {
+    if (!receiptRef.current || !receiptPayment) return;
+    setDownloadingPdf(true);
+    try {
+      const html2canvas = (await import('html2canvas')).default;
+      const { default: jsPDF } = await import('jspdf');
+      const el = receiptRef.current;
+      const canvas = await html2canvas(el, {
+        scale: 2,
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: '#ffffff',
+        windowWidth: el.scrollWidth,
+        windowHeight: el.scrollHeight,
+        scrollX: 0, scrollY: 0,
+      });
+      const imgW = canvas.width;
+      const imgH = canvas.height;
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'px', format: [imgW / 2, imgH / 2] });
+      pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, imgW / 2, imgH / 2);
+      pdf.save(`Mess-Receipt-${String(receiptPayment.id)}.pdf`);
+      toast({ title: "Receipt Downloaded! 🎉" });
+      setReceiptPayment(null);
+    } catch (err: any) {
+      console.error('PDF error:', err);
+      toast({ title: "Download failed", description: err?.message ?? 'Try again', variant: "destructive" });
+    } finally {
+      setDownloadingPdf(false);
+    }
   };
 
   // ... (keep existing useEffects and handlers)
@@ -405,38 +411,49 @@ const StudentFees = () => {
           )}
 
         </div>
-      </PageShell >
+      </PageShell>
       <StudentBottomNav />
 
-      {/* Receipt render target (off-screen for PDF capture) */}
+      {/* Receipt Modal */}
       {receiptPayment && (
-        <>
-          {/* Overlay shown while capturing */}
-          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center">
-            <div className="bg-card rounded-2xl p-6 text-center shadow-xl">
-              <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto mb-3" />
-              <p className="font-semibold text-sm">Generating your receipt PDF...</p>
-            </div>
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex flex-col items-center justify-start overflow-y-auto p-4 pt-8">
+          {/* Close button */}
+          <div className="w-full max-w-sm flex justify-end mb-2">
+            <button
+              onClick={() => setReceiptPayment(null)}
+              className="text-white/70 hover:text-white p-2 rounded-full bg-white/10"
+            >
+              <X className="w-5 h-5" />
+            </button>
           </div>
 
-          {/* Hidden ticket for html2canvas capture */}
-          <div
-            className="fixed top-0 left-full z-40 p-8 bg-white"
-            style={{ width: 420 }}
-          >
+          {/* The ticket — this is what gets captured */}
+          <div ref={receiptRef} className="w-full max-w-sm">
             <MessReceiptTicket
-              ref={receiptRef}
-              receiptId={receiptPayment.id.slice(0, 8).toUpperCase()}
+              receiptId={`#${String(receiptPayment.id)}`}
               planName={receiptPayment.plan_name}
               amount={receiptPayment.amount}
               studentName={user?.name ?? "Student"}
               upiId="9359447581@ibl"
               paymentDate={new Date(receiptPayment.created_at)}
-              barcodeValue={receiptPayment.id.replace(/-/g, "").slice(0, 20).toUpperCase()}
-              showConfetti={false}
+              barcodeValue={String(receiptPayment.id).padStart(16, '0')}
+              showConfetti={true}
             />
           </div>
-        </>
+
+          {/* Download button */}
+          <button
+            onClick={handleSavePdf}
+            disabled={downloadingPdf}
+            className="mt-4 mb-8 w-full max-w-sm flex items-center justify-center gap-2 py-3 rounded-2xl bg-green-500 hover:bg-green-600 active:scale-95 text-white font-bold text-sm transition-all disabled:opacity-60"
+          >
+            {downloadingPdf ? (
+              <><Loader2 className="w-4 h-4 animate-spin" /> Generating PDF...</>
+            ) : (
+              <><Download className="w-4 h-4" /> Save as PDF</>
+            )}
+          </button>
+        </div>
       )}
     </>
   );
