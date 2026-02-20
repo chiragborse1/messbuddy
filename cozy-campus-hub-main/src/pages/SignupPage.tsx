@@ -67,7 +67,6 @@ const SignupPage = () => {
         email: formData.email,
         password: formData.password,
         options: {
-          emailRedirectTo: `${window.location.origin}/auth/callback`,
           data: {
             name: formData.name,
             mobile: formData.mobile,
@@ -81,16 +80,13 @@ const SignupPage = () => {
 
       if (error) throw error;
 
-      // Store photo in localStorage so AuthCallback can upload it after email verification
+      // Email verification is disabled — session is available immediately.
+      // Upload photo now, then sign out (account is pending admin approval).
       if (photoFile && data.user) {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          localStorage.setItem(`pending_avatar_${data.user!.id}`, reader.result as string);
-          localStorage.setItem(`pending_avatar_ext_${data.user!.id}`, (photoFile.name.split('.').pop() || 'jpg'));
-        };
-        reader.readAsDataURL(photoFile);
+        await uploadPhoto(data.user.id, photoFile);
       }
 
+      await supabase.auth.signOut();
       setSubmitted(true);
     } catch (error: any) {
       console.error(error);
@@ -110,12 +106,12 @@ const SignupPage = () => {
         <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center mb-6">
           <CheckCircle2 className="w-10 h-10 text-primary" />
         </div>
-        <h2 className="text-xl font-bold mb-2">Check Your Email 📬</h2>
+        <h2 className="text-xl font-bold mb-2">Request Submitted! 🎉</h2>
         <p className="text-sm text-muted-foreground text-center mb-2 max-w-xs">
-          We sent a verification link to <span className="font-semibold text-foreground">{formData.email}</span>.
+          Your account has been created for <span className="font-semibold text-foreground">{formData.email}</span>.
         </p>
         <p className="text-sm text-muted-foreground text-center mb-8 max-w-xs">
-          Click the link in the email to verify your account, then come back here to log in. After that, your account will be reviewed by an admin.
+          Your account is pending admin approval. You'll be able to log in once the admin activates your account.
         </p>
         <div className="flex flex-col gap-3 w-full max-w-xs">
           <Button variant="default" onClick={() => navigate("/")} className="rounded-xl w-full">
