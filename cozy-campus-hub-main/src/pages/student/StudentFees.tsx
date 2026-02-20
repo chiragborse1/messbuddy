@@ -1,12 +1,13 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import PageShell from "@/components/PageShell";
 import StudentBottomNav from "@/components/StudentBottomNav";
 import StatusBadge from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
-import { Upload, Loader2, History, ArrowLeft, Copy, CheckCircle2 } from "lucide-react";
+import { Upload, Loader2, History, ArrowLeft, Copy, Download, X } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useUser } from "@/contexts/UserContext";
 import { toast } from "@/hooks/use-toast";
+import { MessReceiptTicket } from "@/components/ui/ticket-confirmation-card";
 
 const plans = [
   { id: 1, label: "1 Day Trial", price: 120, desc: "Single day access" },
@@ -20,6 +21,9 @@ const StudentFees = () => {
   const [uploading, setUploading] = useState(false);
   const [startDate, setStartDate] = useState("");
   const [myPayments, setMyPayments] = useState<any[]>([]);
+  const [receiptPayment, setReceiptPayment] = useState<any | null>(null);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const receiptRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (user) {
@@ -115,6 +119,35 @@ const StudentFees = () => {
 
   const [showHistory, setShowHistory] = useState(false);
 
+  const handleDownloadReceipt = async (payment: any) => {
+    setReceiptPayment(payment);
+    // Wait for modal to render, then capture
+    setTimeout(async () => {
+      if (!receiptRef.current) return;
+      setDownloadingPdf(true);
+      try {
+        const html2canvas = (await import('html2canvas')).default;
+        const jsPDF = (await import('jspdf')).default;
+        const canvas = await html2canvas(receiptRef.current, {
+          scale: 2,
+          backgroundColor: '#ffffff',
+          useCORS: true,
+        });
+        const imgData = canvas.toDataURL('image/png');
+        const pdf = new jsPDF({ orientation: 'portrait', unit: 'px', format: [canvas.width / 2, canvas.height / 2] });
+        pdf.addImage(imgData, 'PNG', 0, 0, canvas.width / 2, canvas.height / 2);
+        pdf.save(`Receipt-${payment.plan_name}-${payment.id.slice(0, 8)}.pdf`);
+        toast({ title: "Receipt Downloaded! 🎉" });
+      } catch (err) {
+        console.error(err);
+        toast({ title: "Download failed", variant: "destructive" });
+      } finally {
+        setDownloadingPdf(false);
+        setReceiptPayment(null);
+      }
+    }, 600);
+  };
+
   // ... (keep existing useEffects and handlers)
 
   const pendingPayment = myPayments.find(p => p.status === 'pending');
@@ -142,12 +175,23 @@ const StudentFees = () => {
             <div className="space-y-3">
               {myPayments.length > 0 ? (
                 myPayments.map((p) => (
-                  <div key={p.id} className="bg-card rounded-xl border border-border/50 p-4 flex items-center justify-between shadow-sm">
-                    <div>
-                      <p className="font-semibold text-sm">{p.plan_name}</p>
-                      <p className="text-xs text-muted-foreground">₹{p.amount} • {new Date(p.created_at).toLocaleDateString()}</p>
+                  <div key={p.id} className="bg-card rounded-xl border border-border/50 p-4 shadow-sm">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-semibold text-sm">{p.plan_name}</p>
+                        <p className="text-xs text-muted-foreground">₹{p.amount} • {new Date(p.created_at).toLocaleDateString()}</p>
+                      </div>
+                      <StatusBadge status={p.status} />
                     </div>
-                    <StatusBadge status={p.status} />
+                    {p.status === 'approved' && (
+                      <button
+                        onClick={() => handleDownloadReceipt(p)}
+                        className="mt-3 w-full flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-green-50 hover:bg-green-100 text-green-700 text-xs font-semibold transition-colors border border-green-200 active:scale-95"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        Download Receipt
+                      </button>
+                    )}
                   </div>
                 ))
               ) : (
@@ -363,6 +407,37 @@ const StudentFees = () => {
         </div>
       </PageShell >
       <StudentBottomNav />
+
+      {/* Receipt render target (off-screen for PDF capture) */}
+      {receiptPayment && (
+        <>
+          {/* Overlay shown while capturing */}
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center">
+            <div className="bg-card rounded-2xl p-6 text-center shadow-xl">
+              <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto mb-3" />
+              <p className="font-semibold text-sm">Generating your receipt PDF...</p>
+            </div>
+          </div>
+
+          {/* Hidden ticket for html2canvas capture */}
+          <div
+            className="fixed top-0 left-full z-40 p-8 bg-white"
+            style={{ width: 420 }}
+          >
+            <MessReceiptTicket
+              ref={receiptRef}
+              receiptId={receiptPayment.id.slice(0, 8).toUpperCase()}
+              planName={receiptPayment.plan_name}
+              amount={receiptPayment.amount}
+              studentName={user?.name ?? "Student"}
+              upiId="9359447581@ibl"
+              paymentDate={new Date(receiptPayment.created_at)}
+              barcodeValue={receiptPayment.id.replace(/-/g, "").slice(0, 20).toUpperCase()}
+              showConfetti={false}
+            />
+          </div>
+        </>
+      )}
     </>
   );
 };
