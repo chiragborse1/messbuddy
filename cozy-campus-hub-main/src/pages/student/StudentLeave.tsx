@@ -84,6 +84,15 @@ const StudentLeave = () => {
 
       if (error) throw error;
 
+      // Notify Admins of new leave request
+      supabase.functions.invoke('send-notification', {
+        body: {
+          title: `📌 New ${tab.toUpperCase()} Request`,
+          body: `${user.name} has submitted a ${tab} request for ${dateString}.`,
+          targetRole: 'admin'
+        }
+      });
+
       toast({ title: "Request Submitted", description: `Your ${tab} request is pending approval.` });
       setDate(undefined);
       setReason("");

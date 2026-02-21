@@ -14,9 +14,10 @@ interface NotificationPayload {
     image?: string;
     topic?: string;
     userIds?: string[];
+    targetRole?: 'student' | 'admin';
 }
 
-serve(async (req) => {
+serve(async (req: Request) => {
     if (req.method === 'OPTIONS') {
         return new Response('ok', { headers: corsHeaders })
     }
@@ -45,8 +46,8 @@ serve(async (req) => {
         let serviceAccount;
         try {
             serviceAccount = JSON.parse(secretString)
-        } catch (e) {
-            throw new Error("Failed to parse Service Account JSON: " + e.message);
+        } catch (e: any) {
+            throw new Error("Failed to parse Service Account JSON: " + (e?.message || "Unknown error"));
         }
 
         const projectID = serviceAccount.project_id;
@@ -61,7 +62,17 @@ serve(async (req) => {
         let tokens: string[] = [];
 
         // Determine targets
-        if (payload.topic === "all_students") {
+        if (payload.targetRole) {
+            console.log(`Fetching tokens for role: ${payload.targetRole}...`);
+            const { data, error } = await supabase
+                .from('profiles')
+                .select('fcm_token')
+                .eq('role', payload.targetRole)
+                .not('fcm_token', 'is', null);
+
+            if (error) throw error;
+            tokens = data.map((p: any) => p.fcm_token).filter((t: string | null) => !!t);
+        } else if (payload.topic === "all_students") {
             console.log("Fetching all student tokens...");
             const { data, error } = await supabase
                 .from('profiles')
@@ -69,7 +80,7 @@ serve(async (req) => {
                 .not('fcm_token', 'is', null);
 
             if (error) throw error;
-            tokens = data.map(p => p.fcm_token).filter(t => !!t);
+            tokens = data.map((p: any) => p.fcm_token).filter((t: string | null) => !!t);
         } else if (payload.userIds && payload.userIds.length > 0) {
             console.log(`Fetching tokens for ${payload.userIds.length} users...`);
             const { data, error } = await supabase
@@ -79,7 +90,7 @@ serve(async (req) => {
                 .not('fcm_token', 'is', null);
 
             if (error) throw error;
-            tokens = data.map(p => p.fcm_token).filter(t => !!t);
+            tokens = data.map((p: any) => p.fcm_token).filter((t: string | null) => !!t);
         }
 
         console.log(`Sending to ${tokens.length} total tokens...`);
@@ -99,8 +110,8 @@ serve(async (req) => {
                     }
                 });
                 results.push({ token, status: res.error ? 'error' : 'success', details: res });
-            } catch (e) {
-                results.push({ token, status: 'error', error: e.message });
+            } catch (e: any) {
+                results.push({ token, status: 'error', error: e?.message || "Unknown error" });
             }
         }
 

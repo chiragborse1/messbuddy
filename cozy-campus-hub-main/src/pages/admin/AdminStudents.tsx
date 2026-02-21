@@ -137,7 +137,7 @@ const AdminStudents = () => {
 
   const handleApprove = async (student: any) => {
     try {
-      const hasRequest = student.requested_plan && student.requested_plan_end_date;
+      const hasRequest = student.requested_plan && student.requested_plan_end_date && student.requested_plan_end_date.length > 5;
 
       const { error } = await supabase
         .from('profiles')
@@ -145,7 +145,7 @@ const AdminStudents = () => {
           status: hasRequest ? 'active' : 'approved',
           plan: hasRequest ? student.requested_plan : null,
           plan_end_date: hasRequest ? student.requested_plan_end_date : null,
-          pending_amount: hasRequest ? (student.requested_pending_amount || 0) : 0
+          pending_amount: hasRequest ? (Number(student.requested_pending_amount) || 0) : 0
         })
         .eq('id', student.id);
 
@@ -180,6 +180,16 @@ const AdminStudents = () => {
       if (error) throw error;
 
       toast({ title: "Account Reactivated", description: "Student access restored." });
+
+      // Notify Student
+      supabase.functions.invoke('send-notification', {
+        body: {
+          title: "🔓 Account Reactivated!",
+          body: "Your Kanhaiya Mess account has been restored. You can now use the app normally.",
+          userIds: [studentId]
+        }
+      });
+
       loadStudents();
     } catch (error: any) {
       toast({ title: "Action failed", description: error.message, variant: "destructive" });
@@ -196,6 +206,16 @@ const AdminStudents = () => {
       if (error) throw error;
 
       toast({ title: "Student Suspended", description: "Access has been revoked.", variant: "destructive" });
+
+      // Notify Student
+      supabase.functions.invoke('send-notification', {
+        body: {
+          title: "🔒 Account Suspended",
+          body: "Your mess account access has been revoked. Please contact the administrator.",
+          userIds: [studentId]
+        }
+      });
+
       loadStudents();
     } catch (error: any) {
       toast({ title: "Action failed", description: error.message, variant: "destructive" });

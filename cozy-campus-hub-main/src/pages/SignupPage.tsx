@@ -101,6 +101,15 @@ const SignupPage = () => {
         }
       }
 
+      // Notify Admins of new signup
+      supabase.functions.invoke('send-notification', {
+        body: {
+          title: "🆕 New Student Signup!",
+          body: `${formData.name} has requested to join. Please review for approval.`,
+          targetRole: 'admin'
+        }
+      });
+
       await supabase.auth.signOut();
       setSubmitted(true);
     } catch (error: any) {

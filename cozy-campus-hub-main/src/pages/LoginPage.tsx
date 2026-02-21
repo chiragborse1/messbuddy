@@ -92,7 +92,7 @@ const LoginPage = () => {
         variant: "destructive",
       });
       if (error.message?.includes("Access Denied")) {
-        navigate("/");
+        navigate("/login");
       }
     } finally {
       setLoading(false);
@@ -126,7 +126,6 @@ const LoginPage = () => {
             <img src="/Krishna Logo.png" alt="MessBuddy Logo" className="w-full h-full object-cover" />
           </div>
           <h1 className="text-2xl font-bold">Kanhaiya Mess</h1>
-          <p className="text-sm text-muted-foreground mt-1">Your mess, managed.</p>
         </div>
 
         <div className="flex bg-muted rounded-xl p-1 mb-6">

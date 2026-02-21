@@ -10,6 +10,7 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 
 // Page Imports
 import LoginPage from "./pages/LoginPage";
+import LandingPage from "./pages/LandingPage";
 import SignupPage from "./pages/SignupPage";
 import StudentDashboard from "./pages/student/StudentDashboard";
 import StudentMenu from "./pages/student/StudentMenu";
@@ -53,7 +54,8 @@ const AppWithNotifications = () => {
       <Sonner />
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<LoginPage />} />
+          <Route path="/" element={<LandingPage />} />
+          <Route path="/login" element={<LoginPage />} />
           <Route path="/signup" element={<SignupPage />} />
           <Route path="/auth/callback" element={<AuthCallback />} />
 

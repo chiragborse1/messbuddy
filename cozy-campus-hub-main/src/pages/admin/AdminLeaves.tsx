@@ -129,6 +129,20 @@ const AdminLeaves = () => {
         variant: status === "approved" ? "default" : "destructive",
       });
 
+      // Notify Student of the decision
+      const request = requests.find(r => r.id === id);
+      if (request) {
+        supabase.functions.invoke('send-notification', {
+          body: {
+            title: status === "approved" ? "✅ Leave Request Approved" : "❌ Leave Request Declined",
+            body: status === "approved"
+              ? `Your request for ${formatDate(request.start_date)} has been approved.`
+              : `Your request for ${formatDate(request.start_date)} was not approved. Please contact admin.`,
+            userIds: [request.user_id]
+          }
+        });
+      }
+
       // Refresh list
       fetchRequests();
     } catch (error: any) {

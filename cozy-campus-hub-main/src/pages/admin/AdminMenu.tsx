@@ -206,6 +206,46 @@ const AdminMenu = () => {
         description: open ? "Students can now vote." : "Voting ended.",
       });
 
+      // Notify Students of Menu Results when voting closes
+      if (!open) {
+        const fetchWinnersAndNotify = async () => {
+          try {
+            // Fetch top 1 lunch and top 1 dinner
+            const { data: winners } = await supabase
+              .from('menu_items')
+              .select('name, category, image_url')
+              .neq('category', 'config')
+              .order('votes', { ascending: false });
+
+            if (winners && winners.length > 0) {
+              const topLunch = winners.find(i => i.category === 'lunch');
+              const topDinner = winners.find(i => i.category === 'dinner');
+
+              let message = "The menu has been decided!";
+              if (topLunch && topDinner) {
+                message = `Tomorrow's Special:\n🍱 Lunch: ${topLunch.name}\n🍽️ Dinner: ${topDinner.name}`;
+              } else if (topLunch) {
+                message = `Tomorrow's Lunch: ${topLunch.name}`;
+              } else if (topDinner) {
+                message = `Tomorrow's Dinner: ${topDinner.name}`;
+              }
+
+              supabase.functions.invoke('send-notification', {
+                body: {
+                  title: "🏆 Voting Results Are In!",
+                  body: message,
+                  image: topLunch?.image_url || topDinner?.image_url || "",
+                  topic: "all_students"
+                }
+              });
+            }
+          } catch (e) {
+            console.error("Failed to notify menu winners:", e);
+          }
+        };
+        fetchWinnersAndNotify();
+      }
+
       fetchMenu();
 
     } catch (err: any) {

@@ -112,6 +112,16 @@ const StudentFees = () => {
 
       if (insertError) throw insertError;
 
+      // Notify Admins of new payment
+      supabase.functions.invoke('send-notification', {
+        body: {
+          title: "💰 New Payment Submitted!",
+          body: `${user.name} paid ₹${finalAmount} for ${planLabel}. Please verify receipt.`,
+          targetRole: 'admin',
+          image: publicUrl // Include the receipt screenshot in the admin notification!
+        }
+      });
+
       toast({ title: "Payment Submitted", description: "Admin will review your screenshot." });
       setSelectedPlanId(null);
       setStartDate("");
