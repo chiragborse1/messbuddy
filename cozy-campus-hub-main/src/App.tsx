@@ -7,6 +7,23 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { UserProvider } from "@/contexts/UserContext";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 import ProtectedRoute from "@/components/ProtectedRoute";
+
+// Page Imports
+import LoginPage from "./pages/LoginPage";
+import SignupPage from "./pages/SignupPage";
+import StudentDashboard from "./pages/student/StudentDashboard";
+import StudentMenu from "./pages/student/StudentMenu";
+import StudentFees from "./pages/student/StudentFees";
+import StudentLeave from "./pages/student/StudentLeave";
+import StudentHelp from "./pages/student/StudentHelp";
+import StudentProfile from "./pages/student/StudentProfile";
+import StudentFeedback from "./pages/student/StudentFeedback";
+import StudentChat from "./pages/student/StudentChat";
+import AdminDashboard from "./pages/admin/AdminDashboard";
+import AdminStudents from "./pages/admin/AdminStudents";
+import AdminMenu from "./pages/admin/AdminMenu";
+import AdminPayments from "./pages/admin/AdminPayments";
+import AdminLeaves from "./pages/admin/AdminLeaves";
 import AdminProfile from "./pages/admin/AdminProfile";
 import AdminChat from "./pages/admin/AdminChat";
 import AdminAnalytics from "./pages/admin/AdminAnalytics";
@@ -14,17 +31,7 @@ import AdminNotifications from "./pages/admin/AdminNotifications";
 import NotFound from "./pages/NotFound";
 import AuthCallback from "./pages/AuthCallback";
 
-const AppContent = () => {
-  usePushNotifications();
-
-  return (
-    <TooltipProvider>
-      <Toaster />
-      <Toaster />
-      {/* ... rest of the app content ... */}
-    </TooltipProvider>
-  );
-};
+const queryClient = new QueryClient();
 
 const App = () => {
   return (
@@ -32,12 +39,14 @@ const App = () => {
       <UserProvider>
         <AppWithNotifications />
       </UserProvider>
+      <SpeedInsights />
     </QueryClientProvider>
   );
 };
 
 const AppWithNotifications = () => {
   usePushNotifications();
+
   return (
     <TooltipProvider>
       <Toaster />
