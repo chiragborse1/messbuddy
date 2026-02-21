@@ -1,4 +1,6 @@
 import { useNavigate } from "react-router-dom";
+import { useEffect } from "react";
+import { useUser } from "@/contexts/UserContext";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,6 +14,17 @@ import {
 
 const LandingPage = () => {
     const navigate = useNavigate();
+    const { user, loading } = useUser();
+
+    useEffect(() => {
+        if (!loading && user) {
+            if (user.role === 'admin' || user.role === 'developer') {
+                navigate('/admin', { replace: true });
+            } else if (user.role === 'student' && user.status !== 'pending') {
+                navigate('/student', { replace: true });
+            }
+        }
+    }, [user, loading, navigate]);
 
     return (
         <div className="min-h-screen relative overflow-hidden font-sans">
