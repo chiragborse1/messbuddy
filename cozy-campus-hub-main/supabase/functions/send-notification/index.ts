@@ -11,6 +11,7 @@ const corsHeaders = {
 interface NotificationPayload {
     title: string;
     body: string;
+    image?: string;
     topic?: string;
     userIds?: string[];
 }
@@ -93,6 +94,7 @@ serve(async (req) => {
                         notification: {
                             title: payload.title,
                             body: payload.body,
+                            ...(payload.image ? { image: payload.image } : {})
                         },
                     }
                 });

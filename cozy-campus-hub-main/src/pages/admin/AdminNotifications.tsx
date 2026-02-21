@@ -21,13 +21,42 @@ const AdminNotifications = () => {
     const navigate = useNavigate();
     const [title, setTitle] = useState("");
     const [message, setMessage] = useState("");
+    const [imageUrl, setImageUrl] = useState("");
     const [loading, setLoading] = useState(false);
     const [activeTab, setActiveTab] = useState<"send" | "history">("send");
 
     const sendNotification = async (type: "custom" | "meal" | "mess") => {
+        let finalTitle = type === "custom" ? title : (type === "meal" ? "🍱 Meal is READY!" : "📢 Mess Update");
+        let finalBody = type === "custom" ? message : (type === "meal" ? "Food is served and hot! Come enjoy your lunch/dinner." : message);
+        let finalImage = type === "custom" ? imageUrl : "";
+
+        // Auto-fetch menu for meal ready notifications
+        if (type === "meal") {
+            try {
+                const { data: menuItems } = await supabase
+                    .from('menu_items')
+                    .select('name, image_url')
+                    .neq('category', 'config')
+                    .order('votes', { ascending: false })
+                    .limit(3);
+
+                if (menuItems && menuItems.length > 0) {
+                    const menuText = menuItems.map(i => i.name).join(", ");
+                    finalBody = `Today's Special: ${menuText}. Come and get it!`;
+                    // Use the first item's image as the notification thumbnail
+                    if (menuItems[0].image_url) {
+                        finalImage = menuItems[0].image_url;
+                    }
+                }
+            } catch (e) {
+                console.error("Failed to fetch menu for notification:", e);
+            }
+        }
+
         const payload = {
-            title: type === "custom" ? title : (type === "meal" ? "🍱 Meal is READY!" : "📢 Mess Update"),
-            body: type === "custom" ? message : (type === "meal" ? "Food is served and hot! Come enjoy your lunch/dinner." : message),
+            title: finalTitle,
+            body: finalBody,
+            image: finalImage,
             topic: "all_students"
         };
 
@@ -63,6 +92,7 @@ const AdminNotifications = () => {
             if (type === "custom") {
                 setTitle("");
                 setMessage("");
+                setImageUrl("");
             }
         } catch (error: any) {
             console.error("💥 Notification send failed:", error);
@@ -167,6 +197,17 @@ const AdminNotifications = () => {
                                     placeholder="Type your message here..."
                                     className="w-full bg-muted/50 rounded-xl p-3 text-sm min-h-[100px] border-none focus:ring-1 focus:ring-primary"
                                 />
+                            </div>
+
+                            <div className="space-y-1.5">
+                                <label className="text-xs font-bold text-muted-foreground uppercase ml-1">Image URL (Optional)</label>
+                                <input
+                                    value={imageUrl}
+                                    onChange={(e) => setImageUrl(e.target.value)}
+                                    placeholder="https://example.com/image.jpg"
+                                    className="w-full bg-muted/50 rounded-xl p-3 text-sm border-none focus:ring-1 focus:ring-primary"
+                                />
+                                <p className="text-[10px] text-muted-foreground ml-1 italic">Thumbnail will be shown in the notification.</p>
                             </div>
 
                             <Button

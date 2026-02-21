@@ -210,14 +210,38 @@ const AdminDashboard = () => {
       toast({ title: "Update Failed", variant: "destructive" });
     } else {
       if (newStatus) {
-        // Only notify when ready
-        supabase.functions.invoke('send-notification', {
-          body: {
-            title: "🍱 Meal is READY!",
-            body: "The food is served and hot. Enjoy your meal!",
-            topic: "all_students"
+        // Fetch current menu for a rich notification
+        const fetchAndNotify = async () => {
+          try {
+            const { data: menuItems } = await supabase
+              .from('menu_items')
+              .select('name, image_url')
+              .neq('category', 'config')
+              .order('votes', { ascending: false })
+              .limit(3);
+
+            let body = "The food is served and hot. Enjoy your meal!";
+            let image = "";
+
+            if (menuItems && menuItems.length > 0) {
+              const menuNames = menuItems.map(i => i.name).join(", ");
+              body = `Today's Special: ${menuNames}. Come and get it!`;
+              if (menuItems[0].image_url) image = menuItems[0].image_url;
+            }
+
+            supabase.functions.invoke('send-notification', {
+              body: {
+                title: "🍱 Meal is READY!",
+                body: body,
+                image: image,
+                topic: "all_students"
+              }
+            });
+          } catch (e) {
+            console.error("Dashboard notification failed:", e);
           }
-        });
+        };
+        fetchAndNotify();
       }
       toast({ title: newStatus ? "Meal marked as Ready" : "Meal marked as Preparing" });
     }
