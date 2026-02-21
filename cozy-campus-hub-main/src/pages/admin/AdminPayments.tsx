@@ -100,7 +100,7 @@ const AdminPayments = () => {
           // Fetch current profile
           const { data: profile } = await supabase
             .from('profiles')
-            .select('plan_end_date, pending_amount')
+            .select('plan_end_date, pending_amount, plan')
             .eq('id', payment.user_id)
             .single();
 
@@ -115,25 +115,21 @@ const AdminPayments = () => {
           if (isMonthly) {
             const daysInMonth = new Date(startDate.getFullYear(), startDate.getMonth() + 1, 0).getDate();
             newEndDate.setDate(startDate.getDate() + daysInMonth);
-          } else {
+          } else if (payment.plan_name.includes("Day") || payment.plan_name.includes("Time")) {
             newEndDate.setDate(startDate.getDate() + 1);
+          } else {
+            // If it's just a balance payment (no plan name match), keep the current end date
+            newEndDate = profile?.plan_end_date ? new Date(profile.plan_end_date) : new Date();
           }
 
-          // Calculate new pending amount
-          let newPendingAmount = Number(profile?.pending_amount || 0);
+          // Calculate new pending amount using accumulation logic
+          // (Existing Debt + Total Price of Selection) - Amount Paid
+          const existingDebt = Number(profile?.pending_amount || 0);
 
-          if (isPartial) {
-            // If they are paying a partial amount of a NEW plan
-            if (newPendingAmount === 0) {
-              newPendingAmount = fullPrice - payment.amount;
-            } else {
-              // If they are paying off an existing balance
-              newPendingAmount = Math.max(0, newPendingAmount - payment.amount);
-            }
-          } else if (newPendingAmount > 0 && payment.amount >= newPendingAmount) {
-            // If they paid in full and happened to have a balance, clear it
-            newPendingAmount = 0;
-          }
+          // If the payment is marked as "Partial" or if they are buying a new plan,
+          // we calculate based on the full price of that plan.
+          // If they are just paying an old balance, fullPrice will be 0 (or match amount).
+          let newPendingAmount = Math.max(0, (existingDebt + fullPrice) - payment.amount);
 
           await supabase.from('profiles').update({
             plan: basePlanName,

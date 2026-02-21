@@ -144,6 +144,8 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
         if (updates.photo) dbUpdates.photo_url = updates.photo;
         if (updates.status) dbUpdates.status = updates.status;
         if (updates.plan) dbUpdates.plan = updates.plan;
+        if (updates.planEndDate) dbUpdates.plan_end_date = updates.planEndDate;
+        if (updates.pendingAmount !== undefined) dbUpdates.pending_amount = updates.pendingAmount;
 
         const { error } = await supabase
             .from('profiles')
