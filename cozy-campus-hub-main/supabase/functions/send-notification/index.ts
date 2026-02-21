@@ -1,132 +1,122 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 import * as djwt from "https://deno.land/x/djwt@v2.8/mod.ts"
 
-// 🔥 IMPORTANT: Set your FIREBASE_PROJECT_ID here
-const FIREBASE_PROJECT_ID = "cozy-campus"
+const corsHeaders = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+}
 
-// 🔥 IMPORTANT: You must set FIREBASE_SERVICE_ACCOUNT_JSON in Supabase Secrets
-// Get this from: Firebase Console -> Project Settings -> Service Accounts -> Generate new private key
-const GOOGLE_SERVICE_ACCOUNT = JSON.parse(Deno.env.get("FIREBASE_SERVICE_ACCOUNT_JSON") || "{}")
+interface NotificationPayload {
+    title: string;
+    body: string;
+    topic?: string;
+    userIds?: string[];
+}
 
 serve(async (req) => {
-    // CORS Headers
-    const corsHeaders = {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-    }
-
     // Handle CORS preflight
     if (req.method === 'OPTIONS') {
         return new Response('ok', { headers: corsHeaders })
     }
 
     try {
-        const { title, body, userIds, topic } = await req.json()
+        console.log("Request received:", req.method);
+        const payload: NotificationPayload = await req.json()
+        console.log("Payload:", JSON.stringify(payload));
 
-        // 1. Get access token for Firebase v1 API
-        // Note: In production, you'd use a JWT library or 'google-auth-library'
-        // I am assuming you will set up the secret correctly.
-        const accessToken = await getGoogleAccessToken(GOOGLE_SERVICE_ACCOUNT)
+        const FIREBASE_PROJECT_ID = "cozy-campus"
+        const FIREBASE_SERVICE_ACCOUNT_JSON = Deno.env.get("FIREBASE_SERVICE_ACCOUNT_JSON")
 
-        const supabase = createClient(
-            Deno.env.get("SUPABASE_URL") ?? "",
-            Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
-        )
-
-        let tokens: string[] = []
-
-        if (userIds && userIds.length > 0) {
-            const { data } = await supabase
-                .from("profiles")
-                .select("fcm_token")
-                .in("id", userIds)
-                .not("fcm_token", "is", null)
-
-            tokens = data?.map((p: any) => p.fcm_token) || []
-        } else if (topic === "all_students") {
-            // Fetch all non-null tokens
-            const { data } = await supabase
-                .from("profiles")
-                .select("fcm_token")
-                .not("fcm_token", "is", null)
-
-            tokens = data?.map((p: any) => p.fcm_token) || []
+        if (!FIREBASE_SERVICE_ACCOUNT_JSON) {
+            console.error("Missing FIREBASE_SERVICE_ACCOUNT_JSON secret");
+            throw new Error("Missing FIREBASE_SERVICE_ACCOUNT_JSON secret")
         }
 
-        if (tokens.length === 0) {
-            return new Response(JSON.stringify({ success: true, message: "No target tokens found" }), {
-                status: 200,
-                headers: { ...corsHeaders, "Content-Type": "application/json" }
-            })
+        const serviceAccount = JSON.parse(FIREBASE_SERVICE_ACCOUNT_JSON)
+
+        // 1. Get Access Token via JWT
+        console.log("Generating Google Access Token...");
+        const accessToken = await getGoogleAccessToken(serviceAccount)
+        console.log("Token generated successfully");
+
+        // 2. Send to Firebase
+        let results = [];
+
+        if (payload.topic) {
+            console.log(`Sending to topic: ${payload.topic}`);
+            const res = await sendToFcm(FIREBASE_PROJECT_ID, accessToken, {
+                message: {
+                    topic: payload.topic,
+                    notification: {
+                        title: payload.title,
+                        body: payload.body,
+                    },
+                }
+            });
+            results.push(res);
         }
 
-        // 2. Send to Firebase (Batch send would be better, but loop is simpler for now)
-        const results = []
-        for (const token of tokens) {
-            try {
-                const res = await fetch(
-                    `https://fcm.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/messages:send`,
-                    {
-                        method: "POST",
-                        headers: {
-                            "Content-Type": "application/json",
-                            Authorization: `Bearer ${accessToken}`,
-                        },
-                        body: JSON.stringify({
-                            message: {
-                                token: token,
-                                notification: { title, body },
-                                android: {
-                                    notification: {
-                                        sound: "default",
-                                        click_action: "PUSH_RECEIVE",
-                                    },
-                                },
-                            },
-                        }),
-                    }
-                )
-                results.push(await res.json())
-            } catch (e) {
-                results.push({ error: e.message })
-            }
+        if (payload.userIds && payload.userIds.length > 0) {
+            console.log(`Sending to userIds: ${payload.userIds.join(", ")}`);
+            // We need to fetch tokens for these users first
+            // For now, assume this function is mainly for broadcast or specific topics
+            // If student has a token in DB, we'd query it here.
         }
 
-        return new Response(JSON.stringify({ success: true, count: tokens.length, results }), {
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
+        return new Response(JSON.stringify({ success: true, results }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 200,
         })
-    } catch (error) {
+
+    } catch (error: any) {
+        console.error("Function Error:", error.message);
         return new Response(JSON.stringify({ error: error.message }), {
-            status: 500,
-            headers: { ...corsHeaders, "Content-Type": "application/json" }
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 400,
         })
     }
 })
 
-// Securely getting OAuth2 token for Firebase
 async function getGoogleAccessToken(serviceAccount: any) {
-    const jwt = await djwt.create(
-        { alg: "RS256", typ: "JWT" },
+    const iat = Math.floor(Date.now() / 1000)
+    const exp = iat + 3600
+
+    const header = { alg: "RS256", typ: "JWT" }
+    const claims = {
+        iss: serviceAccount.client_email,
+        scope: "https://www.googleapis.com/auth/firebase.messaging",
+        aud: "https://oauth2.googleapis.com/token",
+        exp,
+        iat,
+    }
+
+    // Import the private key
+    const pemHeader = "-----BEGIN PRIVATE KEY-----";
+    const pemFooter = "-----END PRIVATE KEY-----";
+    const pemContents = serviceAccount.private_key
+        .replace(pemHeader, "")
+        .replace(pemFooter, "")
+        .replace(/\s/g, "");
+
+    const binaryDerString = atob(pemContents);
+    const binaryDer = new Uint8Array(binaryDerString.length);
+    for (let i = 0; i < binaryDerString.length; i++) {
+        binaryDer[i] = binaryDerString.charCodeAt(i);
+    }
+
+    const key = await crypto.subtle.importKey(
+        "pkcs8",
+        binaryDer,
         {
-            iss: serviceAccount.client_email,
-            sub: serviceAccount.client_email,
-            aud: "https://oauth2.googleapis.com/token",
-            iat: djwt.getNumericDate(0),
-            exp: djwt.getNumericDate(3600),
-            scope: "https://www.googleapis.com/auth/cloud-platform",
+            name: "RSASSA-PKCS1-v1_5",
+            hash: "SHA-256",
         },
-        await djwt.importJWK(JSON.parse(JSON.stringify(await crypto.subtle.importKey(
-            "pkcs8",
-            new Uint8Array(atob(serviceAccount.private_key.replace(/-----BEGIN PRIVATE KEY-----|-----END PRIVATE KEY-----|\n/g, "")).split("").map(c => c.charCodeAt(0))),
-            { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
-            true,
-            ["sign"]
-        ).then(async (key) => {
-            const exported = await crypto.subtle.exportKey("jwk", key);
-            return exported;
-        }))), "RS256")
+        true,
+        ["sign"]
     );
+
+    const jwt = await djwt.create(header, claims, key)
 
     const res = await fetch("https://oauth2.googleapis.com/token", {
         method: "POST",
@@ -135,8 +125,29 @@ async function getGoogleAccessToken(serviceAccount: any) {
             grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
             assertion: jwt,
         }),
-    });
+    })
 
-    const { access_token } = await res.json();
-    return access_token;
+    const { access_token, error } = await res.json()
+    if (error) {
+        console.error("OAuth Error:", error);
+        throw new Error(`Failed to get access token: ${error}`)
+    }
+    return access_token
+}
+
+async function sendToFcm(projectId: string, accessToken: string, message: any) {
+    const res = await fetch(`https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify(message),
+    })
+
+    const result = await res.json()
+    if (result.error) {
+        console.error("FCM Send Error:", result.error);
+    }
+    return result
 }

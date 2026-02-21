@@ -38,11 +38,15 @@ const AdminNotifications = () => {
 
         setLoading(true);
         try {
+            console.log("🚀 Invoking Edge Function 'send-notification'...", payload);
             const { data, error } = await supabase.functions.invoke('send-notification', {
                 body: payload
             });
 
-            if (error) throw error;
+            if (error) {
+                console.error("❌ Supabase Function Error:", error);
+                throw error;
+            }
 
             toast({ title: "Notification Sent!", description: "Students will receive it shortly." });
             if (type === "custom") {
