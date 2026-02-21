@@ -45,6 +45,16 @@ const AdminNotifications = () => {
 
             if (error) {
                 console.error("❌ Supabase Function Error:", error);
+
+                // Try to get detailed error from response body
+                try {
+                    const errorData = await error.context.json();
+                    console.log("Detailed Error Data:", errorData);
+                    if (errorData.error) throw new Error(errorData.error);
+                } catch (e: any) {
+                    if (e.message && e.message !== "[object Object]") throw e;
+                }
+
                 throw error;
             }
 
@@ -57,15 +67,14 @@ const AdminNotifications = () => {
         } catch (error: any) {
             console.error("💥 Notification send failed:", error);
 
-            // Try to extract the custom error message we added to the Edge Function
             let errorMessage = error.message || "Unknown error occurred";
 
-            // Check if error message is a JSON string (sometimes happens with invoke)
-            try {
-                const parsed = JSON.parse(error.message);
-                if (parsed.error) errorMessage = parsed.error;
-            } catch (e) {
-                // Not JSON, use as is
+            // If it's a Supabase error object, it might be stringified JSON
+            if (errorMessage.includes('{"error":')) {
+                try {
+                    const parsed = JSON.parse(errorMessage.substring(errorMessage.indexOf('{')));
+                    if (parsed.error) errorMessage = parsed.error;
+                } catch (e) { }
             }
 
             toast({

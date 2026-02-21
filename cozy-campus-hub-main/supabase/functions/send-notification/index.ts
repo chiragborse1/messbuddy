@@ -15,21 +15,21 @@ interface NotificationPayload {
 }
 
 serve(async (req) => {
-    // Handle CORS preflight
     if (req.method === 'OPTIONS') {
         return new Response('ok', { headers: corsHeaders })
     }
 
     try {
-        console.log("Request received:", req.method);
+        console.log("--- New Notification Request ---");
         const payload: NotificationPayload = await req.json()
         console.log("Payload:", JSON.stringify(payload));
 
         const FIREBASE_SERVICE_ACCOUNT_JSON = Deno.env.get("FIREBASE_SERVICE_ACCOUNT_JSON")
 
         if (!FIREBASE_SERVICE_ACCOUNT_JSON) {
-            console.error("Missing FIREBASE_SERVICE_ACCOUNT_JSON secret");
-            return new Response(JSON.stringify({ error: "Missing FIREBASE_SERVICE_ACCOUNT_JSON secret on Supabase" }), {
+            const err = "ERROR: Missing FIREBASE_SERVICE_ACCOUNT_JSON secret on Supabase dashboard.";
+            console.error(err);
+            return new Response(JSON.stringify({ error: err }), {
                 headers: { ...corsHeaders, 'Content-Type': 'application/json' },
                 status: 400,
             })
@@ -37,37 +37,48 @@ serve(async (req) => {
 
         let serviceAccount;
         try {
+            console.log("Parsing Service Account JSON... (Length: " + FIREBASE_SERVICE_ACCOUNT_JSON.length + ")");
             serviceAccount = JSON.parse(FIREBASE_SERVICE_ACCOUNT_JSON)
         } catch (e) {
-            console.error("Failed to parse Service Account JSON:", e.message);
-            return new Response(JSON.stringify({ error: "Invalid Service Account JSON format: " + e.message }), {
+            const err = "ERROR: Failed to parse Service Account JSON. Check if it is a valid JSON. " + e.message;
+            console.error(err);
+            return new Response(JSON.stringify({ error: err }), {
                 headers: { ...corsHeaders, 'Content-Type': 'application/json' },
                 status: 400,
             })
         }
 
-        const FIREBASE_PROJECT_ID = serviceAccount.project_id || "cozy-campus";
+        const FIREBASE_PROJECT_ID = serviceAccount.project_id;
+        if (!FIREBASE_PROJECT_ID) {
+            const err = "ERROR: project_id missing in service account JSON.";
+            console.error(err);
+            return new Response(JSON.stringify({ error: err }), {
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+                status: 400,
+            })
+        }
 
         // 1. Get Access Token via JWT
-        console.log("Generating Google Access Token...");
+        console.log("Step 1: Generating Google Access Token for project: " + FIREBASE_PROJECT_ID);
         let accessToken;
         try {
             accessToken = await getGoogleAccessToken(serviceAccount)
+            console.log("Token generated successfully (Starts with: " + accessToken.substring(0, 10) + "...)");
         } catch (e) {
-            console.error("Token Generation Error:", e.message);
-            return new Response(JSON.stringify({ error: "OAuth Token Failure: " + e.message }), {
+            const err = "Step 1 FAILED (OAuth): " + e.message;
+            console.error(err);
+            return new Response(JSON.stringify({ error: err }), {
                 headers: { ...corsHeaders, 'Content-Type': 'application/json' },
                 status: 400,
             })
         }
 
-        console.log("Token generated successfully");
-
         // 2. Send to Firebase
+        console.log("Step 2: Sending to FCM...");
         let results = [];
 
         if (payload.topic) {
-            console.log(`Sending to topic: ${payload.topic}`);
+            console.log(`Target Topic: ${payload.topic}`);
             const res = await sendToFcm(FIREBASE_PROJECT_ID, accessToken, {
                 message: {
                     topic: payload.topic,
@@ -77,23 +88,27 @@ serve(async (req) => {
                     },
                 }
             });
+            console.log("FCM Response:", JSON.stringify(res));
             results.push(res);
 
             if (res.error) {
-                return new Response(JSON.stringify({ error: "FCM Error: " + JSON.stringify(res.error) }), {
+                const err = "Step 2 FAILED (FCM): " + (res.error.message || JSON.stringify(res.error));
+                console.error(err);
+                return new Response(JSON.stringify({ error: err }), {
                     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
                     status: 400,
                 })
             }
         }
 
+        console.log("--- Request Finished Successfully ---");
         return new Response(JSON.stringify({ success: true, results }), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             status: 200,
         })
 
     } catch (error: any) {
-        console.error("Global Function Error:", error.message);
+        console.error("GLOBAL ERROR:", error.message);
         return new Response(JSON.stringify({ error: "System Error: " + error.message }), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             status: 400,
@@ -114,6 +129,8 @@ async function getGoogleAccessToken(serviceAccount: any) {
         iat,
     }
 
+    if (!serviceAccount.private_key) throw new Error("private_key missing in service account");
+
     // Import the private key
     const pemHeader = "-----BEGIN PRIVATE KEY-----";
     const pemFooter = "-----END PRIVATE KEY-----";
@@ -122,10 +139,15 @@ async function getGoogleAccessToken(serviceAccount: any) {
         .replace(pemFooter, "")
         .replace(/\s/g, "");
 
-    const binaryDerString = atob(pemContents);
-    const binaryDer = new Uint8Array(binaryDerString.length);
-    for (let i = 0; i < binaryDerString.length; i++) {
-        binaryDer[i] = binaryDerString.charCodeAt(i);
+    let binaryDer;
+    try {
+        const binaryDerString = atob(pemContents);
+        binaryDer = new Uint8Array(binaryDerString.length);
+        for (let i = 0; i < binaryDerString.length; i++) {
+            binaryDer[i] = binaryDerString.charCodeAt(i);
+        }
+    } catch (e) {
+        throw new Error("Failed to decode private key base64: " + e.message);
     }
 
     const key = await crypto.subtle.importKey(
@@ -152,7 +174,7 @@ async function getGoogleAccessToken(serviceAccount: any) {
 
     const body = await res.json()
     if (body.error) {
-        throw new Error(body.error_description || body.error)
+        throw new Error("Google OAuth Error: " + (body.error_description || body.error))
     }
     return body.access_token
 }
