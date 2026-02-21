@@ -5,13 +5,15 @@ const config: CapacitorConfig = {
     appName: 'Kanhaiya Mess',
     webDir: 'dist',
 
-    // ✅ LIVE UPDATE: Loads from Vercel — no APK update needed for web changes
-    // Replace with your actual Vercel URL below:
+    /* 
+    // ❌ LIVE UPDATE: Loads from Vercel — no APK update needed for web changes
+    // Commented out to use local assets (bundled in APK) for better stability/offline support
     server: {
-        url: 'https://messbuddy-ten.vercel.app/', // ← replace with your actual Vercel URL
-        cleartext: false, // HTTPS only
+        url: 'https://messbuddy-ten.vercel.app/',
+        cleartext: false,
         androidScheme: 'https',
     },
+    */
 
     android: {
         buildOptions: {
