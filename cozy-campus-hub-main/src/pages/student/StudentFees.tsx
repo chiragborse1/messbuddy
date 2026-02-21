@@ -10,9 +10,12 @@ import { toast } from "@/hooks/use-toast";
 import { MessReceiptTicket } from "@/components/ui/ticket-confirmation-card";
 
 const plans = [
-  { id: 1, label: "1 Day Trial", price: 120, desc: "Single day access" },
-  { id: 2, label: "Boys Monthly", price: 2200, desc: "" },
-  { id: 3, label: "Girls Monthly", price: 1600, desc: "" },
+  { id: 1, label: "Boys Monthly Mess", price: 1300, desc: "Full month access for boys" },
+  { id: 2, label: "Girls Monthly Mess", price: 1000, desc: "Full month access for girls" },
+  { id: 3, label: "Boys 1 Day Mess", price: 120, desc: "24-hour access for boys" },
+  { id: 4, label: "Girls 1 Day Mess", price: 80, desc: "24-hour access for girls" },
+  { id: 5, label: "Boys 1 Time Mess", price: 80, desc: "Single meal choice for boys" },
+  { id: 6, label: "Girls 1 Time Mess", price: 40, desc: "Single meal choice for girls" },
 ];
 
 const StudentFees = () => {
@@ -23,6 +26,8 @@ const StudentFees = () => {
   const [myPayments, setMyPayments] = useState<any[]>([]);
   const [receiptPayment, setReceiptPayment] = useState<any | null>(null);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const [isPartialPayment, setIsPartialPayment] = useState(false);
+  const [partialAmount, setPartialAmount] = useState("");
   const receiptRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -93,10 +98,13 @@ const StudentFees = () => {
         .getPublicUrl(fileName);
 
       // 3. Insert Record
+      const finalAmount = isPartialPayment ? Number(partialAmount) : plan.price;
+      const planLabel = isPartialPayment ? `${plan.label} (Partial)` : plan.label;
+
       const { error: insertError } = await supabase.from('payments').insert({
         user_id: user.id,
-        amount: plan.price,
-        plan_name: plan.label,
+        amount: finalAmount,
+        plan_name: planLabel,
         screenshot_url: publicUrl,
         membership_start_date: startDate,
         status: 'pending'
@@ -231,7 +239,10 @@ const StudentFees = () => {
                       {plans.map((plan) => (
                         <button
                           key={plan.id}
-                          onClick={() => setSelectedPlanId(plan.id)}
+                          onClick={() => {
+                            setSelectedPlanId(plan.id);
+                            setIsPartialPayment(false); // Reset on plan change
+                          }}
                           className={`w-full p-4 rounded-2xl border text-left transition-all relative overflow-hidden ${selectedPlanId === plan.id
                             ? "bg-primary/5 border-primary ring-1 ring-primary/20 shadow-md"
                             : "bg-card border-border/50 hover:border-primary/30"
@@ -247,6 +258,14 @@ const StudentFees = () => {
                         </button>
                       ))}
                     </div>
+
+                    {/* Pending Balance Warning if any */}
+                    {user?.pendingAmount && user.pendingAmount > 0 ? (
+                      <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-2xl">
+                        <p className="text-xs font-bold text-red-600 uppercase mb-1">Attention</p>
+                        <p className="text-sm text-red-700">You have a pending balance of <b>₹{user.pendingAmount}</b>. Please clear it soon.</p>
+                      </div>
+                    ) : null}
                   </div>
 
                   {/* Recent Activity */}
@@ -287,6 +306,37 @@ const StudentFees = () => {
                   {/* Payment Section */}
                   {selectedPlanId && (
                     <div className="pt-4 border-t border-dashed border-border/50">
+                      {/* Partial Payment Toggle */}
+                      <div className="mb-6 p-4 bg-muted/30 rounded-2xl border border-secondary/30">
+                        <div className="flex items-center justify-between mb-3">
+                          <label className="text-sm font-semibold cursor-pointer select-none" htmlFor="partial-toggle">
+                            Pay in Installments?
+                          </label>
+                          <input
+                            id="partial-toggle"
+                            type="checkbox"
+                            checked={isPartialPayment}
+                            onChange={(e) => setIsPartialPayment(e.target.checked)}
+                            className="w-5 h-5 rounded border-gray-300 text-primary focus:ring-primary"
+                          />
+                        </div>
+                        {isPartialPayment && (
+                          <div className="space-y-2 animate-in fade-in slide-in-from-top-2 duration-200">
+                            <p className="text-xs text-muted-foreground">Enter the amount you are paying today. The rest will be shown as "Pending" on your profile.</p>
+                            <div className="relative">
+                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-bold">₹</span>
+                              <input
+                                type="number"
+                                placeholder="Amount paying now"
+                                value={partialAmount}
+                                onChange={(e) => setPartialAmount(e.target.value)}
+                                className="w-full pl-7 pr-4 py-3 rounded-xl border border-border bg-background focus:ring-2 focus:ring-primary/20 outline-none transition-all font-bold"
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
                       <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">Pay via UPI</h2>
 
                       <div className="bg-white rounded-2xl border border-border/50 p-5 text-center mb-4 shadow-sm">
@@ -313,7 +363,8 @@ const StudentFees = () => {
                       {/* Pay via App Buttons */}
                       {(() => {
                         const plan = plans.find(p => p.id === selectedPlanId);
-                        const upiParams = `pa=9359447581@ibl&pn=Akshay+Anil+Patil&am=${plan?.price}&cu=INR&tn=${encodeURIComponent(plan?.label ?? 'Mess Plan')}`;
+                        const displayPrice = isPartialPayment ? (Number(partialAmount) || 0) : (plan?.price || 0);
+                        const upiParams = `pa=9359447581@ibl&pn=Akshay+Anil+Patil&am=${displayPrice}&cu=INR&tn=${encodeURIComponent(plan?.label ?? 'Mess Plan')}`;
                         const upiApps = [
                           {
                             name: "Google Pay",

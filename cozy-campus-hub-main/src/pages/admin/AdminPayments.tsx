@@ -76,46 +76,70 @@ const AdminPayments = () => {
         throw error;
       }
 
-      // If approved, update user's plan end date
+      // If approved, update user's plan end date and handle installments
       if (status === 'approved') {
         const payment = payments.find(p => p.id === id);
         if (payment && payment.user_id) {
           const isMonthly = payment.plan_name.includes("Monthly");
+          const isPartial = payment.plan_name.includes("(Partial)");
 
-          // Fetch current profile to get current end date
-          // Fetch current profile to get current end date
+          // Map plan names to full prices
+          const planPrices: Record<string, number> = {
+            "Boys Monthly Mess": 1300,
+            "Girls Monthly Mess": 1000,
+            "Boys 1 Day Mess": 120,
+            "Girls 1 Day Mess": 80,
+            "Boys 1 Time Mess": 80,
+            "Girls 1 Time Mess": 40
+          };
+
+          // Get full expected price (strip "(Partial)" if present)
+          const basePlanName = payment.plan_name.replace(" (Partial)", "");
+          const fullPrice = planPrices[basePlanName] || payment.amount;
+
+          // Fetch current profile
           const { data: profile } = await supabase
             .from('profiles')
-            .select('plan_end_date')
+            .select('plan_end_date, pending_amount')
             .eq('id', payment.user_id)
             .single();
 
-          let startDate = new Date(); // Default to today
-
-          // Priority 1: User specified start date
+          let startDate = new Date();
           if (payment.membership_start_date) {
             startDate = new Date(payment.membership_start_date);
-          }
-          // Priority 2: Extend existing active plan (only if no specific start date given)
-          else if (profile?.plan_end_date && new Date(profile.plan_end_date) > new Date()) {
+          } else if (profile?.plan_end_date && new Date(profile.plan_end_date) > new Date()) {
             startDate = new Date(profile.plan_end_date);
           }
 
           let newEndDate = new Date(startDate);
-
           if (isMonthly) {
-            // Add days of the starting month (e.g., Feb = 28/29, Mar = 31)
             const daysInMonth = new Date(startDate.getFullYear(), startDate.getMonth() + 1, 0).getDate();
             newEndDate.setDate(startDate.getDate() + daysInMonth);
           } else {
-            // 1 Day Trial
             newEndDate.setDate(startDate.getDate() + 1);
           }
 
+          // Calculate new pending amount
+          let newPendingAmount = Number(profile?.pending_amount || 0);
+
+          if (isPartial) {
+            // If they are paying a partial amount of a NEW plan
+            if (newPendingAmount === 0) {
+              newPendingAmount = fullPrice - payment.amount;
+            } else {
+              // If they are paying off an existing balance
+              newPendingAmount = Math.max(0, newPendingAmount - payment.amount);
+            }
+          } else if (newPendingAmount > 0 && payment.amount >= newPendingAmount) {
+            // If they paid in full and happened to have a balance, clear it
+            newPendingAmount = 0;
+          }
+
           await supabase.from('profiles').update({
-            plan: payment.plan_name,
+            plan: basePlanName,
             plan_end_date: newEndDate.toISOString(),
-            status: 'active'
+            status: 'active',
+            pending_amount: newPendingAmount
           }).eq('id', payment.user_id);
         }
       }
@@ -163,7 +187,7 @@ const AdminPayments = () => {
           ).getDate();
           currentEndDate.setDate(currentEndDate.getDate() - daysInMonth);
         } else {
-          // 1 Day Trial: remove 1 day
+          // Non-monthly plans: remove 1 day
           currentEndDate.setDate(currentEndDate.getDate() - 1);
         }
 

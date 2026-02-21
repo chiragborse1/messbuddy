@@ -3,6 +3,8 @@ import PageShell from "@/components/PageShell";
 import AdminBottomNav from "@/components/AdminBottomNav";
 import StatusBadge from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Check, X, Loader2, ChevronDown, ChevronUp } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import {
@@ -42,6 +44,8 @@ const AdminStudents = () => {
   // Drawer State
   const [adjustingStudent, setAdjustingStudent] = useState<any>(null);
   const [adjustmentDays, setAdjustmentDays] = useState(0);
+  const [adjustmentPlan, setAdjustmentPlan] = useState("");
+  const [adjustmentBalance, setAdjustmentBalance] = useState(0);
 
   const loadStudents = async (silent = false) => {
     // ... existing loadStudents logic ... (I am replacing too much context if I copy paste all. I will target specific lines)
@@ -69,6 +73,8 @@ const AdminStudents = () => {
   const handleOpenAdjustment = (student: any) => {
     setAdjustingStudent(student);
     setAdjustmentDays(0);
+    setAdjustmentPlan(student.plan || "");
+    setAdjustmentBalance(student.pending_amount || 0);
   };
 
   const confirmAdjustment = async () => {
@@ -89,6 +95,8 @@ const AdminStudents = () => {
         .update({
           plan_end_date: baseDate.toISOString(),
           status: newStatus,
+          plan: adjustmentPlan || null,
+          pending_amount: adjustmentBalance
         })
         .eq('id', adjustingStudent.id);
 
@@ -127,17 +135,21 @@ const AdminStudents = () => {
     };
   }, []);
 
-  const handleApprove = async (studentId: string) => {
+  const handleApprove = async (student: any) => {
     try {
-      const daysInCurrentMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
+      // If student requested a plan, use that data and make them active immediately
+      // Otherwise, just make them 'approved' so they can purchase a plan
+      const hasRequest = student.requested_plan && student.requested_plan_end_date;
+
       const { error } = await supabase
         .from('profiles')
         .update({
-          status: 'approved',
-          plan: null,
-          plan_end_date: null
+          status: hasRequest ? 'active' : 'approved',
+          plan: hasRequest ? student.requested_plan : null,
+          plan_end_date: hasRequest ? student.requested_plan_end_date : null,
+          pending_amount: hasRequest ? (student.requested_pending_amount || 0) : 0
         })
-        .eq('id', studentId);
+        .eq('id', student.id);
 
       if (error) throw error;
 
@@ -399,96 +411,144 @@ const AdminStudents = () => {
                           <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Email</p>
                           <p className="font-medium text-foreground break-all">{s.email || "N/A"}</p>
                         </div>
-                        {(s.status === 'active' || s.status === 'approved') && (
-                          <div className="space-y-0.5 sm:col-span-2">
-                            <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Plan</p>
-                            <p className="font-medium text-foreground flex items-center gap-2">
-                              <span>
-                                {s.plan || 'No Plan'}
-                                {s.plan_end_date && (
-                                  <span className="text-muted-foreground font-normal text-xs"> • Ends {formatDate(s.plan_end_date)}</span>
-                                )}
-                              </span>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleOpenAdjustment(s);
-                                }}
-                                className="px-2 py-0.5 rounded bg-primary/10 text-primary text-[10px] font-bold hover:bg-primary/20 transition-colors"
-                              >
-                                Edit Days
-                              </button>
-                            </p>
-                          </div>
-                        )}
                       </div>
 
-                      {s.status === "pending" ? (
-                        <div className="flex gap-3 mt-5 pt-4 border-t border-border/50">
-                          <Button
-                            onClick={(e) => { e.stopPropagation(); handleApprove(s.id); }}
-                            className="flex-1 bg-green-600 hover:bg-green-700 text-white shadow-sm h-9"
-                          >
-                            <Check className="w-4 h-4 mr-2" />
-                            Approve
-                          </Button>
-                          <Button
-                            variant="destructive"
-                            onClick={(e) => { e.stopPropagation(); handleReject(s.id); }}
-                            className="flex-1 shadow-sm h-9"
-                          >
-                            <X className="w-4 h-4 mr-2" />
-                            Reject
-                          </Button>
+                      {/* Membership Verification Block */}
+                      {s.status === 'pending' && (
+                        <div className={`mt-4 p-3 rounded-xl border ${s.requested_plan ? "bg-primary/5 border-primary/20" : "bg-muted/30 border-border/50"} space-y-3`}>
+                          <div className="flex items-center justify-between">
+                            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Membership Type</p>
+                            <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${s.requested_plan ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}`}>
+                              {s.requested_plan ? "EXISTING MEMBER" : "NEW STUDENT"}
+                            </span>
+                          </div>
+
+                          {s.requested_plan ? (
+                            <div className="space-y-3">
+                              <div className="grid grid-cols-2 gap-4 text-sm">
+                                <div>
+                                  <p className="text-[10px] text-muted-foreground font-semibold uppercase">Claimed Plan</p>
+                                  <p className="font-bold text-foreground">{s.requested_plan}</p>
+                                </div>
+                                <div>
+                                  <p className="text-[10px] text-muted-foreground font-semibold uppercase">Plan End Date</p>
+                                  <p className="font-bold text-foreground">{formatDate(s.requested_plan_end_date)}</p>
+                                </div>
+                              </div>
+
+                              {(s.requested_pending_amount || 0) > 0 && (
+                                <div className="p-2.5 bg-orange-100/50 border border-orange-200 rounded-lg">
+                                  <p className="text-[10px] text-orange-800 font-bold uppercase mb-0.5">Pending Balance to Sync</p>
+                                  <p className="text-sm font-black text-orange-950">₹{s.requested_pending_amount}</p>
+                                </div>
+                              )}
+
+                              <div className="p-2 bg-primary/10 rounded-lg">
+                                <p className="text-[10px] text-primary font-medium leading-tight italic">
+                                  ✨ Approving will automatically activate this plan and set full access.
+                                </p>
+                              </div>
+                            </div>
+                          ) : (
+                            <p className="text-[10px] text-muted-foreground italic">
+                              This student has no existing membership. Approving will allow them to purchase a new plan.
+                            </p>
+                          )}
                         </div>
-                      ) : s.status === "deleted" ? (
-                        <div className="flex gap-3 mt-5 pt-4 border-t border-border/50">
-                          <Button
-                            onClick={(e) => { e.stopPropagation(); handleReactivate(s.id); }}
-                            className="flex-1 bg-green-600 hover:bg-green-700 text-white shadow-sm h-9"
-                          >
-                            <Check className="w-4 h-4 mr-2" />
-                            Restore
-                          </Button>
-                          <Button
-                            variant="destructive"
-                            onClick={(e) => { e.stopPropagation(); handlePermanentDelete(s.id); }}
-                            className="flex-1 shadow-sm h-9"
-                          >
-                            <X className="w-4 h-4 mr-2" />
-                            Delete Permanently
-                          </Button>
+                      )}
+
+                      {/* Active Plan / Adjust Plan Block */}
+                      {(s.status === 'active' || s.status === 'approved') && (
+                        <div className="mt-4 space-y-0.5">
+                          <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Active Plan</p>
+                          <p className="font-medium text-foreground flex items-center gap-2">
+                            <span>
+                              {s.plan || 'No Plan'}
+                              {s.plan_end_date && (
+                                <span className="text-muted-foreground font-normal text-xs"> • Ends {formatDate(s.plan_end_date)}</span>
+                              )}
+                            </span>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenAdjustment(s);
+                              }}
+                              className="px-2 py-0.5 rounded bg-primary/10 text-primary text-[10px] font-bold hover:bg-primary/20 transition-colors"
+                            >
+                              Edit Days
+                            </button>
+                          </p>
                         </div>
-                      ) : (
-                        <div className="flex gap-3 mt-5 pt-4 border-t border-border/50">
-                          {(s.status === 'active' || s.status === 'approved') ? (
+                      )}
+
+                      {/* Action Buttons Block */}
+                      <div className="flex gap-3 mt-5 pt-4 border-t border-border/50">
+                        {s.status === "pending" ? (
+                          <>
+                            <Button
+                              onClick={(e) => { e.stopPropagation(); handleApprove(s); }}
+                              className="flex-1 bg-green-600 hover:bg-green-700 text-white shadow-sm h-9"
+                            >
+                              <Check className="w-4 h-4 mr-2" />
+                              Approve
+                            </Button>
                             <Button
                               variant="destructive"
-                              onClick={(e) => { e.stopPropagation(); handleSuspend(s.id); }}
-                              className="flex-1 shadow-sm h-9 bg-orange-600 hover:bg-orange-700 text-white"
+                              onClick={(e) => { e.stopPropagation(); handleReject(s.id); }}
+                              className="flex-1 shadow-sm h-9"
                             >
                               <X className="w-4 h-4 mr-2" />
-                              Suspend/Ban
+                              Reject
                             </Button>
-                          ) : (
+                          </>
+                        ) : s.status === "deleted" ? (
+                          <>
                             <Button
                               onClick={(e) => { e.stopPropagation(); handleReactivate(s.id); }}
                               className="flex-1 bg-green-600 hover:bg-green-700 text-white shadow-sm h-9"
                             >
                               <Check className="w-4 h-4 mr-2" />
-                              Re-activate
+                              Restore
                             </Button>
-                          )}
-
-                          <Button
-                            variant="outline"
-                            onClick={(e) => { e.stopPropagation(); handleDelete(s.id); }}
-                            className="flex-1 shadow-sm h-9 border-destructive/30 text-destructive hover:bg-destructive/10"
-                          >
-                            Move to Trash
-                          </Button>
-                        </div>
-                      )}
+                            <Button
+                              variant="destructive"
+                              onClick={(e) => { e.stopPropagation(); handlePermanentDelete(s.id); }}
+                              className="flex-1 shadow-sm h-9"
+                            >
+                              <X className="w-4 h-4 mr-2" />
+                              Delete Permanently
+                            </Button>
+                          </>
+                        ) : (
+                          <>
+                            {(s.status === 'active' || s.status === 'approved') ? (
+                              <Button
+                                variant="destructive"
+                                onClick={(e) => { e.stopPropagation(); handleSuspend(s.id); }}
+                                className="flex-1 shadow-sm h-9 bg-orange-600 hover:bg-orange-700 text-white"
+                              >
+                                <X className="w-4 h-4 mr-2" />
+                                Suspend
+                              </Button>
+                            ) : (
+                              <Button
+                                onClick={(e) => { e.stopPropagation(); handleReactivate(s.id); }}
+                                className="flex-1 bg-green-600 hover:bg-green-700 text-white shadow-sm h-9"
+                              >
+                                <Check className="w-4 h-4 mr-2" />
+                                Activate
+                              </Button>
+                            )}
+                            <Button
+                              variant="outline"
+                              onClick={(e) => { e.stopPropagation(); handleDelete(s.id); }}
+                              className="flex-1 shadow-sm h-9 border-destructive/30 text-destructive hover:bg-destructive/10"
+                            >
+                              Move to Trash
+                            </Button>
+                          </>
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -496,7 +556,7 @@ const AdminStudents = () => {
             })
           )}
         </div>
-      </PageShell>
+      </PageShell >
       <AdminBottomNav />
 
       {/* Adjust Plan Drawer */}
@@ -509,14 +569,47 @@ const AdminStudents = () => {
                 Swipe to add or remove days for {adjustingStudent?.name}.
               </DrawerDescription>
             </DrawerHeader>
-            <div className="p-4 pb-0">
-              <div className="flex items-center justify-center space-x-2 mb-4">
-                <div className={`text-5xl font-bold tracking-tighter ${adjustmentDays === 0 ? 'text-muted-foreground' : (adjustmentDays > 0 ? 'text-primary' : 'text-orange-500')}`}>
-                  {adjustmentDays > 0 ? '+' : ''}{adjustmentDays}
-                </div>
-                <div className="text-[0.70rem] uppercase text-muted-foreground mt-3">Days</div>
+            <div className="p-4 space-y-4">
+              {/* Plan Name Field */}
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Active Plan</Label>
+                <select
+                  className="w-full h-11 rounded-xl border border-input bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-primary/20 outline-none"
+                  value={adjustmentPlan}
+                  onChange={(e) => setAdjustmentPlan(e.target.value)}
+                >
+                  <option value="">No Plan</option>
+                  <option value="Boys Monthly Mess">Boys Monthly Mess (₹1300)</option>
+                  <option value="Girls Monthly Mess">Girls Monthly Mess (₹1000)</option>
+                  <option value="Boys 1 Day Mess">Boys 1 Day Mess (₹120)</option>
+                  <option value="Girls 1 Day Mess">Girls 1 Day Mess (₹80)</option>
+                  <option value="Boys 1 Time Mess">Boys 1 Time Mess (₹80)</option>
+                  <option value="Girls 1 Time Mess">Girls 1 Time Mess (₹40)</option>
+                </select>
               </div>
-              <div className="h-[200px] relative flex items-center justify-center overflow-hidden bg-muted/20 rounded-xl border border-border/50">
+
+              {/* Pending Balance Field */}
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Pending Balance (₹)</Label>
+                <Input
+                  type="number"
+                  value={adjustmentBalance}
+                  onChange={(e) => setAdjustmentBalance(Number(e.target.value))}
+                  className="h-11 rounded-xl font-bold"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Adjust Expiry (Days)</Label>
+                <div className="flex items-center justify-center space-x-2">
+                  <div className={`text-4xl font-bold tracking-tighter ${adjustmentDays === 0 ? 'text-muted-foreground' : (adjustmentDays > 0 ? 'text-primary' : 'text-orange-500')}`}>
+                    {adjustmentDays > 0 ? '+' : ''}{adjustmentDays}
+                  </div>
+                  <div className="text-[0.70rem] uppercase text-muted-foreground mt-3 font-bold">Days</div>
+                </div>
+              </div>
+
+              <div className="h-[150px] relative flex items-center justify-center overflow-hidden bg-muted/20 rounded-xl border border-border/50">
                 {/* Highlight Bar */}
                 <div className="absolute w-[80%] h-12 bg-background rounded-lg shadow-sm pointer-events-none z-0 top-1/2 -translate-y-1/2 left-1/2 -translate-x-1/2 border border-primary/20" />
 

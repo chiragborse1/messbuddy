@@ -20,6 +20,11 @@ const SignupPage = () => {
     college: "",
     course: "",
     password: "",
+    isExistingMember: false,
+    requestedPlan: "",
+    requestedPlanEndDate: "",
+    hasPendingAmount: false,
+    pendingAmount: "0",
   });
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -73,17 +78,27 @@ const SignupPage = () => {
             college: formData.college,
             course: formData.course,
             role: 'student',
-            status: 'pending'
+            status: 'pending',
+            requested_plan: formData.isExistingMember ? formData.requestedPlan : null,
+            requested_plan_end_date: formData.isExistingMember ? formData.requestedPlanEndDate : null,
+            requested_pending_amount: formData.isExistingMember && formData.hasPendingAmount ? Number(formData.pendingAmount) : 0
           }
         }
       });
 
       if (error) throw error;
+      if (!data.user) throw new Error("User creation failed");
 
-      // Email verification is disabled — session is available immediately.
-      // Upload photo now, then sign out (account is pending admin approval).
-      if (photoFile && data.user) {
-        await uploadPhoto(data.user.id, photoFile);
+      // Note: All profile details (name, college, plan, etc.) are now 
+      // automatically synced by the database trigger from the signup metadata.
+
+      // Upload photo if provided
+      if (photoFile) {
+        const photoUrl = await uploadPhoto(data.user.id, photoFile);
+        if (photoUrl) {
+          // Photo URL update is the only manual sync needed
+          await supabase.from('profiles').update({ photo_url: photoUrl }).eq('id', data.user.id);
+        }
       }
 
       await supabase.auth.signOut();
@@ -218,6 +233,90 @@ const SignupPage = () => {
               onChange={(e) => setFormData({ ...formData, password: e.target.value })}
             />
           </div>
+        </div>
+
+        {/* Existing Member Toggle */}
+        <div className="bg-muted/30 p-4 rounded-2xl border border-secondary/20 space-y-3">
+          <div className="flex items-center justify-between">
+            <Label className="text-sm font-semibold cursor-pointer" htmlFor="existing-member">
+              Are you already a Mess Member?
+            </Label>
+            <input
+              id="existing-member"
+              type="checkbox"
+              checked={formData.isExistingMember}
+              onChange={(e) => setFormData({ ...formData, isExistingMember: e.target.checked })}
+              className="w-5 h-5 rounded border-gray-300 text-primary focus:ring-primary"
+            />
+          </div>
+
+          {formData.isExistingMember && (
+            <div className="space-y-4 pt-2 animate-in fade-in slide-in-from-top-2 duration-200">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="requestedPlan" className="text-sm font-medium">Previous Plan</Label>
+                  <select
+                    id="requestedPlan"
+                    className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-primary/20 outline-none"
+                    value={formData.requestedPlan}
+                    onChange={(e) => setFormData({ ...formData, requestedPlan: e.target.value })}
+                    required={formData.isExistingMember}
+                  >
+                    <option value="">Select Plan</option>
+                    <option value="Boys Monthly Mess">Boys Monthly Mess (₹1300)</option>
+                    <option value="Girls Monthly Mess">Girls Monthly Mess (₹1000)</option>
+                    <option value="Boys 1 Day Mess">Boys 1 Day Mess (₹120)</option>
+                    <option value="Girls 1 Day Mess">Girls 1 Day Mess (₹80)</option>
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="requestedPlanEndDate" className="text-sm font-medium">End Date</Label>
+                  <Input
+                    id="requestedPlanEndDate"
+                    type="date"
+                    value={formData.requestedPlanEndDate}
+                    onChange={(e) => setFormData({ ...formData, requestedPlanEndDate: e.target.value })}
+                    required={formData.isExistingMember}
+                  />
+                </div>
+              </div>
+
+              {/* New Pending Amount Fields */}
+              <div className="pt-2 border-t border-border/50">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <Label className="text-sm font-medium">Any Pending Balance?</Label>
+                    <p className="text-[10px] text-muted-foreground">Select if you have an unpaid amount</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, hasPendingAmount: !formData.hasPendingAmount })}
+                    className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background ${formData.hasPendingAmount ? 'bg-primary' : 'bg-muted'}`}
+                  >
+                    <span className={`pointer-events-none block h-4 w-4 rounded-full bg-background shadow-lg ring-0 transition-transform ${formData.hasPendingAmount ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                  </button>
+                </div>
+
+                {formData.hasPendingAmount && (
+                  <div className="mt-3 space-y-2 animate-in fade-in slide-in-from-top-1 duration-200">
+                    <Label htmlFor="pendingAmount" className="text-sm font-medium text-orange-600">Enter Pending Amount (₹)</Label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-bold">₹</span>
+                      <Input
+                        id="pendingAmount"
+                        type="number"
+                        placeholder="e.g. 500"
+                        className="pl-7"
+                        value={formData.pendingAmount}
+                        onChange={(e) => setFormData({ ...formData, pendingAmount: e.target.value })}
+                        required={formData.hasPendingAmount}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         <Button

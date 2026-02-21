@@ -16,6 +16,7 @@ export interface UserData {
     plan?: string;
     onLeave?: boolean;
     planEndDate?: string;
+    pendingAmount?: number;
 }
 
 interface UserContextType {
@@ -50,6 +51,7 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
                     planEndDate: data.plan_end_date,
                     photo: data.photo_url,
                     onLeave: data.on_leave,
+                    pendingAmount: data.pending_amount || 0,
                     daysRemaining: (['active', 'approved'].includes(data.status) && data.plan_end_date)
                         ? Math.max(0, Math.ceil((new Date(data.plan_end_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
                         : 0,
