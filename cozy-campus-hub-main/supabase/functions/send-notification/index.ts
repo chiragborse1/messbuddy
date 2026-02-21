@@ -25,19 +25,42 @@ serve(async (req) => {
         const payload: NotificationPayload = await req.json()
         console.log("Payload:", JSON.stringify(payload));
 
-        const FIREBASE_PROJECT_ID = "cozy-campus"
         const FIREBASE_SERVICE_ACCOUNT_JSON = Deno.env.get("FIREBASE_SERVICE_ACCOUNT_JSON")
 
         if (!FIREBASE_SERVICE_ACCOUNT_JSON) {
             console.error("Missing FIREBASE_SERVICE_ACCOUNT_JSON secret");
-            throw new Error("Missing FIREBASE_SERVICE_ACCOUNT_JSON secret")
+            return new Response(JSON.stringify({ error: "Missing FIREBASE_SERVICE_ACCOUNT_JSON secret on Supabase" }), {
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+                status: 400,
+            })
         }
 
-        const serviceAccount = JSON.parse(FIREBASE_SERVICE_ACCOUNT_JSON)
+        let serviceAccount;
+        try {
+            serviceAccount = JSON.parse(FIREBASE_SERVICE_ACCOUNT_JSON)
+        } catch (e) {
+            console.error("Failed to parse Service Account JSON:", e.message);
+            return new Response(JSON.stringify({ error: "Invalid Service Account JSON format: " + e.message }), {
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+                status: 400,
+            })
+        }
+
+        const FIREBASE_PROJECT_ID = serviceAccount.project_id || "cozy-campus";
 
         // 1. Get Access Token via JWT
         console.log("Generating Google Access Token...");
-        const accessToken = await getGoogleAccessToken(serviceAccount)
+        let accessToken;
+        try {
+            accessToken = await getGoogleAccessToken(serviceAccount)
+        } catch (e) {
+            console.error("Token Generation Error:", e.message);
+            return new Response(JSON.stringify({ error: "OAuth Token Failure: " + e.message }), {
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+                status: 400,
+            })
+        }
+
         console.log("Token generated successfully");
 
         // 2. Send to Firebase
@@ -55,13 +78,13 @@ serve(async (req) => {
                 }
             });
             results.push(res);
-        }
 
-        if (payload.userIds && payload.userIds.length > 0) {
-            console.log(`Sending to userIds: ${payload.userIds.join(", ")}`);
-            // We need to fetch tokens for these users first
-            // For now, assume this function is mainly for broadcast or specific topics
-            // If student has a token in DB, we'd query it here.
+            if (res.error) {
+                return new Response(JSON.stringify({ error: "FCM Error: " + JSON.stringify(res.error) }), {
+                    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+                    status: 400,
+                })
+            }
         }
 
         return new Response(JSON.stringify({ success: true, results }), {
@@ -70,8 +93,8 @@ serve(async (req) => {
         })
 
     } catch (error: any) {
-        console.error("Function Error:", error.message);
-        return new Response(JSON.stringify({ error: error.message }), {
+        console.error("Global Function Error:", error.message);
+        return new Response(JSON.stringify({ error: "System Error: " + error.message }), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             status: 400,
         })
@@ -127,12 +150,11 @@ async function getGoogleAccessToken(serviceAccount: any) {
         }),
     })
 
-    const { access_token, error } = await res.json()
-    if (error) {
-        console.error("OAuth Error:", error);
-        throw new Error(`Failed to get access token: ${error}`)
+    const body = await res.json()
+    if (body.error) {
+        throw new Error(body.error_description || body.error)
     }
-    return access_token
+    return body.access_token
 }
 
 async function sendToFcm(projectId: string, accessToken: string, message: any) {
@@ -145,9 +167,5 @@ async function sendToFcm(projectId: string, accessToken: string, message: any) {
         body: JSON.stringify(message),
     })
 
-    const result = await res.json()
-    if (result.error) {
-        console.error("FCM Send Error:", result.error);
-    }
-    return result
+    return await res.json()
 }

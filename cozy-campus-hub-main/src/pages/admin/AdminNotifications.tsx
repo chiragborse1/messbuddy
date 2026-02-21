@@ -48,13 +48,31 @@ const AdminNotifications = () => {
                 throw error;
             }
 
+            console.log("✅ Function Response:", data);
             toast({ title: "Notification Sent!", description: "Students will receive it shortly." });
             if (type === "custom") {
                 setTitle("");
                 setMessage("");
             }
         } catch (error: any) {
-            toast({ title: "Failed to send", description: error.message, variant: "destructive" });
+            console.error("💥 Notification send failed:", error);
+
+            // Try to extract the custom error message we added to the Edge Function
+            let errorMessage = error.message || "Unknown error occurred";
+
+            // Check if error message is a JSON string (sometimes happens with invoke)
+            try {
+                const parsed = JSON.parse(error.message);
+                if (parsed.error) errorMessage = parsed.error;
+            } catch (e) {
+                // Not JSON, use as is
+            }
+
+            toast({
+                title: "Failed to send",
+                description: errorMessage,
+                variant: "destructive"
+            });
         } finally {
             setLoading(false);
         }
