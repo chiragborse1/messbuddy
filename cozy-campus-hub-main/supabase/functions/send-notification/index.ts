@@ -20,66 +20,61 @@ serve(async (req) => {
     }
 
     try {
-        console.log("--- New Notification Request ---");
+        console.log("--- Notification Request Start ---");
         const payload: NotificationPayload = await req.json()
-        console.log("Payload:", JSON.stringify(payload));
 
-        const FIREBASE_SERVICE_ACCOUNT_JSON = Deno.env.get("FIREBASE_SERVICE_ACCOUNT_JSON")
+        let rawSecret = Deno.env.get("FIREBASE_SERVICE_ACCOUNT_JSON")
 
-        if (!FIREBASE_SERVICE_ACCOUNT_JSON) {
-            const err = "ERROR: Missing FIREBASE_SERVICE_ACCOUNT_JSON secret on Supabase dashboard.";
-            console.error(err);
-            return new Response(JSON.stringify({ error: err }), {
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-                status: 400,
-            })
+        if (!rawSecret) {
+            throw new Error("Missing FIREBASE_SERVICE_ACCOUNT_JSON secret.")
+        }
+
+        let secretString = rawSecret.trim();
+
+        // --- NEW: AUTOMATIC BASE64 DECODING ---
+        // If it doesn't start with '{' but looks like base64, try decoding it
+        if (!secretString.startsWith('{')) {
+            try {
+                console.log("Secret does not start with '{'. Attempting Base64 decode...");
+                const decoded = atob(secretString);
+                if (decoded.trim().startsWith('{')) {
+                    console.log("Successfully decoded Base64 JSON.");
+                    secretString = decoded.trim();
+                }
+            } catch (e) {
+                console.log("Not a valid Base64 string or decode failed. Proceeding with raw string.");
+            }
+        }
+
+        // Final fallback: Strip accidental outer quotes added by shell
+        if (secretString.startsWith('"') && secretString.endsWith('"')) {
+            secretString = secretString.substring(1, secretString.length - 1).replace(/\\"/g, '"');
         }
 
         let serviceAccount;
         try {
-            console.log("Parsing Service Account JSON... (Length: " + FIREBASE_SERVICE_ACCOUNT_JSON.length + ")");
-            serviceAccount = JSON.parse(FIREBASE_SERVICE_ACCOUNT_JSON)
+            serviceAccount = JSON.parse(secretString)
         } catch (e) {
-            const err = "ERROR: Failed to parse Service Account JSON. Check if it is a valid JSON. " + e.message;
-            console.error(err);
-            return new Response(JSON.stringify({ error: err }), {
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-                status: 400,
-            })
+            console.error("JSON Parse Error info:", {
+                message: e.message,
+                first5: secretString.substring(0, 5),
+                last5: secretString.substring(secretString.length - 5)
+            });
+            throw new Error("Failed to parse Service Account JSON. Position: " + e.message);
         }
 
-        const FIREBASE_PROJECT_ID = serviceAccount.project_id;
-        if (!FIREBASE_PROJECT_ID) {
-            const err = "ERROR: project_id missing in service account JSON.";
-            console.error(err);
-            return new Response(JSON.stringify({ error: err }), {
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-                status: 400,
-            })
-        }
+        const projectID = serviceAccount.project_id;
+        if (!projectID) throw new Error("project_id missing in service account");
 
-        // 1. Get Access Token via JWT
-        console.log("Step 1: Generating Google Access Token for project: " + FIREBASE_PROJECT_ID);
-        let accessToken;
-        try {
-            accessToken = await getGoogleAccessToken(serviceAccount)
-            console.log("Token generated successfully (Starts with: " + accessToken.substring(0, 10) + "...)");
-        } catch (e) {
-            const err = "Step 1 FAILED (OAuth): " + e.message;
-            console.error(err);
-            return new Response(JSON.stringify({ error: err }), {
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-                status: 400,
-            })
-        }
+        // 1. Get Access Token
+        console.log("Fetching Google Access Token...");
+        const accessToken = await getGoogleAccessToken(serviceAccount)
 
         // 2. Send to Firebase
-        console.log("Step 2: Sending to FCM...");
-        let results = [];
-
+        console.log("Sending to FCM Topic: " + (payload.topic || 'none'));
+        const results = [];
         if (payload.topic) {
-            console.log(`Target Topic: ${payload.topic}`);
-            const res = await sendToFcm(FIREBASE_PROJECT_ID, accessToken, {
+            const res = await sendToFcm(projectID, accessToken, {
                 message: {
                     topic: payload.topic,
                     notification: {
@@ -88,28 +83,22 @@ serve(async (req) => {
                     },
                 }
             });
-            console.log("FCM Response:", JSON.stringify(res));
             results.push(res);
-
             if (res.error) {
-                const err = "Step 2 FAILED (FCM): " + (res.error.message || JSON.stringify(res.error));
-                console.error(err);
-                return new Response(JSON.stringify({ error: err }), {
-                    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-                    status: 400,
-                })
+                console.error("FCM Error Details:", JSON.stringify(res.error));
+                throw new Error("FCM Error: " + (res.error.message || JSON.stringify(res.error)));
             }
         }
 
-        console.log("--- Request Finished Successfully ---");
+        console.log("--- Success ---");
         return new Response(JSON.stringify({ success: true, results }), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             status: 200,
         })
 
     } catch (error: any) {
-        console.error("GLOBAL ERROR:", error.message);
-        return new Response(JSON.stringify({ error: "System Error: " + error.message }), {
+        console.error("Edge Function Error:", error.message);
+        return new Response(JSON.stringify({ error: error.message }), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             status: 400,
         })
@@ -129,34 +118,21 @@ async function getGoogleAccessToken(serviceAccount: any) {
         iat,
     }
 
-    if (!serviceAccount.private_key) throw new Error("private_key missing in service account");
-
-    // Import the private key
-    const pemHeader = "-----BEGIN PRIVATE KEY-----";
-    const pemFooter = "-----END PRIVATE KEY-----";
     const pemContents = serviceAccount.private_key
-        .replace(pemHeader, "")
-        .replace(pemFooter, "")
+        .replace("-----BEGIN PRIVATE KEY-----", "")
+        .replace("-----END PRIVATE KEY-----", "")
         .replace(/\s/g, "");
 
-    let binaryDer;
-    try {
-        const binaryDerString = atob(pemContents);
-        binaryDer = new Uint8Array(binaryDerString.length);
-        for (let i = 0; i < binaryDerString.length; i++) {
-            binaryDer[i] = binaryDerString.charCodeAt(i);
-        }
-    } catch (e) {
-        throw new Error("Failed to decode private key base64: " + e.message);
+    const binaryDerString = atob(pemContents);
+    const binaryDer = new Uint8Array(binaryDerString.length);
+    for (let i = 0; i < binaryDerString.length; i++) {
+        binaryDer[i] = binaryDerString.charCodeAt(i);
     }
 
     const key = await crypto.subtle.importKey(
         "pkcs8",
         binaryDer,
-        {
-            name: "RSASSA-PKCS1-v1_5",
-            hash: "SHA-256",
-        },
+        { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
         true,
         ["sign"]
     );
@@ -173,9 +149,7 @@ async function getGoogleAccessToken(serviceAccount: any) {
     })
 
     const body = await res.json()
-    if (body.error) {
-        throw new Error("Google OAuth Error: " + (body.error_description || body.error))
-    }
+    if (body.error) throw new Error("OAuth Error: " + (body.error_description || body.error));
     return body.access_token
 }
 
@@ -188,6 +162,5 @@ async function sendToFcm(projectId: string, accessToken: string, message: any) {
         },
         body: JSON.stringify(message),
     })
-
     return await res.json()
 }
