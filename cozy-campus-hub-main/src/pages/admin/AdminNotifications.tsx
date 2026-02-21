@@ -11,7 +11,11 @@ import {
     AlertCircle,
     History,
     ArrowLeft,
-    MessageSquare
+    MessageSquare,
+    Camera,
+    Image as ImageIcon,
+    Trash2,
+    X
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
@@ -22,13 +26,60 @@ const AdminNotifications = () => {
     const [title, setTitle] = useState("");
     const [message, setMessage] = useState("");
     const [imageUrl, setImageUrl] = useState("");
+    const [photoFile, setPhotoFile] = useState<File | null>(null);
+    const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+    const [uploading, setUploading] = useState(false);
     const [loading, setLoading] = useState(false);
     const [activeTab, setActiveTab] = useState<"send" | "history">("send");
 
+    const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            setPhotoFile(file);
+            setPhotoPreview(URL.createObjectURL(file));
+            setImageUrl(""); // Clear manual URL if file is selected
+        }
+    };
+
+    const uploadNotificationPhoto = async (file: File) => {
+        setUploading(true);
+        try {
+            const fileExt = file.name.split('.').pop();
+            const fileName = `notif_${Math.random().toString(36).substring(2)}_${Date.now()}.${fileExt}`;
+            const filePath = `${fileName}`;
+
+            const { error: uploadError } = await supabase.storage
+                .from('avatars')
+                .upload(filePath, file, { upsert: true });
+
+            if (uploadError) throw uploadError;
+
+            const { data } = supabase.storage.from('avatars').getPublicUrl(filePath);
+            return data.publicUrl;
+        } catch (error: any) {
+            toast({ title: "Upload Failed", description: error.message, variant: "destructive" });
+            return null;
+        } finally {
+            setUploading(false);
+        }
+    };
+
     const sendNotification = async (type: "custom" | "meal" | "mess") => {
+        setLoading(true);
+        let finalImage = type === "custom" ? imageUrl : "";
+
+        // Handle File Upload if exists
+        if (type === "custom" && photoFile) {
+            const uploadedUrl = await uploadNotificationPhoto(photoFile);
+            if (!uploadedUrl) {
+                setLoading(false);
+                return;
+            }
+            finalImage = uploadedUrl;
+        }
+
         let finalTitle = type === "custom" ? title : (type === "meal" ? "🍱 Meal is READY!" : "📢 Mess Update");
         let finalBody = type === "custom" ? message : (type === "meal" ? "Food is served and hot! Come enjoy your lunch/dinner." : message);
-        let finalImage = type === "custom" ? imageUrl : "";
 
         // Auto-fetch menu for meal ready notifications
         if (type === "meal") {
@@ -93,6 +144,8 @@ const AdminNotifications = () => {
                 setTitle("");
                 setMessage("");
                 setImageUrl("");
+                setPhotoFile(null);
+                setPhotoPreview(null);
             }
         } catch (error: any) {
             console.error("💥 Notification send failed:", error);
@@ -200,22 +253,61 @@ const AdminNotifications = () => {
                             </div>
 
                             <div className="space-y-1.5">
-                                <label className="text-xs font-bold text-muted-foreground uppercase ml-1">Image URL (Optional)</label>
-                                <input
-                                    value={imageUrl}
-                                    onChange={(e) => setImageUrl(e.target.value)}
-                                    placeholder="https://example.com/image.jpg"
-                                    className="w-full bg-muted/50 rounded-xl p-3 text-sm border-none focus:ring-1 focus:ring-primary"
-                                />
-                                <p className="text-[10px] text-muted-foreground ml-1 italic">Thumbnail will be shown in the notification.</p>
+                                <label className="text-xs font-bold text-muted-foreground uppercase ml-1">Attachment (Gallery)</label>
+                                <div className="flex gap-3">
+                                    <label className={`flex-1 h-12 rounded-xl border-2 border-dashed flex items-center justify-center gap-2 cursor-pointer transition-all ${photoPreview ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50'}`}>
+                                        <input type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} />
+                                        {photoPreview ? (
+                                            <>
+                                                <Check className="w-4 h-4 text-primary" />
+                                                <span className="text-sm font-medium text-primary">Image Selected</span>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <ImageIcon className="w-4 h-4 text-muted-foreground" />
+                                                <span className="text-sm text-muted-foreground font-medium">Choose from Gallery</span>
+                                            </>
+                                        )}
+                                    </label>
+
+                                    {photoPreview && (
+                                        <button
+                                            onClick={() => { setPhotoFile(null); setPhotoPreview(null); }}
+                                            className="w-12 h-12 rounded-xl bg-red-50 border border-red-100 flex items-center justify-center text-red-500 hover:bg-red-100"
+                                        >
+                                            <Trash2 className="w-5 h-5" />
+                                        </button>
+                                    )}
+                                </div>
+                                {photoPreview && (
+                                    <div className="mt-2 relative w-full aspect-video rounded-xl overflow-hidden border border-border/50">
+                                        <img src={photoPreview} alt="Preview" className="w-full h-full object-cover" />
+                                        <div className="absolute inset-0 bg-black/20" />
+                                        <div className="absolute bottom-2 left-2 bg-black/60 text-white text-[10px] px-2 py-0.5 rounded-full backdrop-blur-md">
+                                            Preview
+                                        </div>
+                                    </div>
+                                )}
                             </div>
+
+                            {!photoPreview && (
+                                <div className="space-y-1.5">
+                                    <label className="text-xs font-bold text-muted-foreground uppercase ml-1">Or Image URL</label>
+                                    <input
+                                        value={imageUrl}
+                                        onChange={(e) => setImageUrl(e.target.value)}
+                                        placeholder="https://example.com/image.jpg"
+                                        className="w-full bg-muted/50 rounded-xl p-3 text-sm border-none focus:ring-1 focus:ring-primary"
+                                    />
+                                </div>
+                            )}
 
                             <Button
                                 onClick={() => sendNotification("custom")}
-                                disabled={loading || !title.trim() || !message.trim()}
+                                disabled={loading || uploading || !title.trim() || !message.trim()}
                                 className="w-full rounded-xl gap-2 mt-2"
                             >
-                                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                                {loading || uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                                 Broadcast to All Students
                             </Button>
                         </div>
