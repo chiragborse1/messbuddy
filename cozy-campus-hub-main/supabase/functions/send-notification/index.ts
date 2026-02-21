@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import * as djwt from "https://deno.land/x/djwt@v2.8/mod.ts"
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
@@ -24,29 +25,18 @@ serve(async (req) => {
         const payload: NotificationPayload = await req.json()
 
         let rawSecret = Deno.env.get("FIREBASE_SERVICE_ACCOUNT_JSON")
-
-        if (!rawSecret) {
-            throw new Error("Missing FIREBASE_SERVICE_ACCOUNT_JSON secret.")
-        }
+        if (!rawSecret) throw new Error("Missing FIREBASE_SERVICE_ACCOUNT_JSON secret.")
 
         let secretString = rawSecret.trim();
-
-        // --- NEW: AUTOMATIC BASE64 DECODING ---
-        // If it doesn't start with '{' but looks like base64, try decoding it
+        // Base64 auto-decode
         if (!secretString.startsWith('{')) {
             try {
-                console.log("Secret does not start with '{'. Attempting Base64 decode...");
                 const decoded = atob(secretString);
-                if (decoded.trim().startsWith('{')) {
-                    console.log("Successfully decoded Base64 JSON.");
-                    secretString = decoded.trim();
-                }
-            } catch (e) {
-                console.log("Not a valid Base64 string or decode failed. Proceeding with raw string.");
-            }
+                if (decoded.trim().startsWith('{')) secretString = decoded.trim();
+            } catch (e) { /* proceed raw */ }
         }
 
-        // Final fallback: Strip accidental outer quotes added by shell
+        // Strip shell quotes
         if (secretString.startsWith('"') && secretString.endsWith('"')) {
             secretString = secretString.substring(1, secretString.length - 1).replace(/\\"/g, '"');
         }
@@ -55,43 +45,65 @@ serve(async (req) => {
         try {
             serviceAccount = JSON.parse(secretString)
         } catch (e) {
-            console.error("JSON Parse Error info:", {
-                message: e.message,
-                first5: secretString.substring(0, 5),
-                last5: secretString.substring(secretString.length - 5)
-            });
-            throw new Error("Failed to parse Service Account JSON. Position: " + e.message);
+            throw new Error("Failed to parse Service Account JSON: " + e.message);
         }
 
         const projectID = serviceAccount.project_id;
-        if (!projectID) throw new Error("project_id missing in service account");
-
-        // 1. Get Access Token
-        console.log("Fetching Google Access Token...");
         const accessToken = await getGoogleAccessToken(serviceAccount)
 
-        // 2. Send to Firebase
-        console.log("Sending to FCM Topic: " + (payload.topic || 'none'));
+        // Supabase Client for fetching tokens
+        const supabase = createClient(
+            Deno.env.get('SUPABASE_URL') ?? '',
+            Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+        )
+
+        let tokens: string[] = [];
+
+        // Determine targets
+        if (payload.topic === "all_students") {
+            console.log("Fetching all student tokens...");
+            const { data, error } = await supabase
+                .from('profiles')
+                .select('fcm_token')
+                .not('fcm_token', 'is', null);
+
+            if (error) throw error;
+            tokens = data.map(p => p.fcm_token).filter(t => !!t);
+        } else if (payload.userIds && payload.userIds.length > 0) {
+            console.log(`Fetching tokens for ${payload.userIds.length} users...`);
+            const { data, error } = await supabase
+                .from('profiles')
+                .select('fcm_token')
+                .in('id', payload.userIds)
+                .not('fcm_token', 'is', null);
+
+            if (error) throw error;
+            tokens = data.map(p => p.fcm_token).filter(t => !!t);
+        }
+
+        console.log(`Sending to ${tokens.length} total tokens...`);
+
+        // Send to each token
         const results = [];
-        if (payload.topic) {
-            const res = await sendToFcm(projectID, accessToken, {
-                message: {
-                    topic: payload.topic,
-                    notification: {
-                        title: payload.title,
-                        body: payload.body,
-                    },
-                }
-            });
-            results.push(res);
-            if (res.error) {
-                console.error("FCM Error Details:", JSON.stringify(res.error));
-                throw new Error("FCM Error: " + (res.error.message || JSON.stringify(res.error)));
+        for (const token of tokens) {
+            try {
+                const res = await sendToFcm(projectID, accessToken, {
+                    message: {
+                        token: token,
+                        notification: {
+                            title: payload.title,
+                            body: payload.body,
+                        },
+                    }
+                });
+                results.push({ token, status: res.error ? 'error' : 'success', details: res });
+            } catch (e) {
+                results.push({ token, status: 'error', error: e.message });
             }
         }
 
         console.log("--- Success ---");
-        return new Response(JSON.stringify({ success: true, results }), {
+        return new Response(JSON.stringify({ success: true, count: tokens.length, results }), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             status: 200,
         })
@@ -106,10 +118,9 @@ serve(async (req) => {
 })
 
 async function getGoogleAccessToken(serviceAccount: any) {
+    const header = { alg: "RS256", typ: "JWT" }
     const iat = Math.floor(Date.now() / 1000)
     const exp = iat + 3600
-
-    const header = { alg: "RS256", typ: "JWT" }
     const claims = {
         iss: serviceAccount.client_email,
         scope: "https://www.googleapis.com/auth/firebase.messaging",

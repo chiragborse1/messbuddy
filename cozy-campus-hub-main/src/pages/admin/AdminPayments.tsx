@@ -140,6 +140,20 @@ const AdminPayments = () => {
         }
       }
 
+      // Notify the student
+      const paymentData = payments.find(p => p.id === id);
+      if (paymentData && paymentData.user_id) {
+        supabase.functions.invoke('send-notification', {
+          body: {
+            title: status === 'approved' ? "💰 Payment Approved!" : "❌ Payment Rejected",
+            body: status === 'approved'
+              ? `Your payment of ₹${paymentData.amount} for ${paymentData.plan_name} has been verified.`
+              : `Your payment of ₹${paymentData.amount} was not approved. Please contact the admin.`,
+            userIds: [paymentData.user_id]
+          }
+        });
+      }
+
       toast({
         title: status === 'approved' ? "Payment Approved" : "Payment Rejected",
         description: "Student has been notified."
