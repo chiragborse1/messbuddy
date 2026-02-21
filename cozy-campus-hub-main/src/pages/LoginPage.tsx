@@ -10,17 +10,17 @@ import { supabase, getProfile } from "@/lib/supabase";
 
 const LoginPage = () => {
   const navigate = useNavigate();
-  const { user, loading } = useUser();
+  const { user, loading: authLoading } = useUser();
 
   useEffect(() => {
-    if (!loading && user) {
+    if (!authLoading && user) {
       if (user.role === 'admin' || user.role === 'developer') {
         navigate('/admin', { replace: true });
       } else if (user.role === 'student' && user.status !== 'pending') {
         navigate('/student', { replace: true });
       }
     }
-  }, [user, loading, navigate]);
+  }, [user, authLoading, navigate]);
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loginAs, setLoginAs] = useState<"student" | "admin">("student");
