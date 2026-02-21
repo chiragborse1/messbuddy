@@ -137,8 +137,6 @@ const AdminStudents = () => {
 
   const handleApprove = async (student: any) => {
     try {
-      // If student requested a plan, use that data and make them active immediately
-      // Otherwise, just make them 'approved' so they can purchase a plan
       const hasRequest = student.requested_plan && student.requested_plan_end_date;
 
       const { error } = await supabase
@@ -152,6 +150,15 @@ const AdminStudents = () => {
         .eq('id', student.id);
 
       if (error) throw error;
+
+      // Notify the student
+      supabase.functions.invoke('send-notification', {
+        body: {
+          title: "🎉 Account Approved!",
+          body: "Your Kanhaiya Mess account is now active. You can now access all features!",
+          userIds: [student.id]
+        }
+      });
 
       toast({
         title: "Student Approved",

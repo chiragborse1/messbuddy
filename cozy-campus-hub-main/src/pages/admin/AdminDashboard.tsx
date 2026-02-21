@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import PageShell from "@/components/PageShell";
 import AdminBottomNav from "@/components/AdminBottomNav";
-import { Users, IndianRupee, UserPlus, Shield, Loader2, Utensils, Clock, Check, MessageCircle } from "lucide-react";
+import { Users, IndianRupee, UserPlus, Shield, Loader2, Utensils, Clock, Check, MessageCircle, Bell } from "lucide-react";
 import { useUser } from "@/contexts/UserContext";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
@@ -44,13 +44,12 @@ const AdminDashboard = () => {
           .select('id, votes')
           .eq('category', 'config')
           .eq('name', 'mess_status')
-          .maybeSingle(); // Use maybeSingle to avoid 406 error if not found
+          .maybeSingle();
 
         if (configData) {
           setMessOpen(configData.votes === 1);
           setMessConfigId(configData.id);
         } else {
-          // Default: Open
           setMessOpen(true);
         }
 
@@ -68,51 +67,39 @@ const AdminDashboard = () => {
         }
 
         // 2. Fetch Student Counts
-        const { count: total, error: totalErr } = await supabase
+        const { count: total } = await supabase
           .from('profiles')
           .select('*', { count: 'exact', head: true })
           .eq('role', 'student');
 
-        const { count: active, error: activeErr } = await supabase
+        const { count: active } = await supabase
           .from('profiles')
           .select('*', { count: 'exact', head: true })
           .eq('role', 'student')
           .gt('plan_end_date', new Date().toISOString());
 
-        const { count: pending, error: pendingErr } = await supabase
+        const { count: pending } = await supabase
           .from('profiles')
           .select('*', { count: 'exact', head: true })
           .eq('role', 'student')
           .eq('status', 'pending');
 
-        const { count: menuCount, error: menuErr } = await supabase
+        const { count: menuCount } = await supabase
           .from('menu_items')
           .select('*', { count: 'exact', head: true })
           .neq('category', 'config');
 
-        const { count: leaveCount, error: leaveErr } = await supabase
+        const { count: leaveCount } = await supabase
           .from('leave_requests')
           .select('*', { count: 'exact', head: true })
           .eq('status', 'pending');
 
-        const { data: paymentsData, error: paymentErr } = await supabase
+        const { data: paymentsData } = await supabase
           .from('payments')
           .select('amount')
           .eq('status', 'approved');
 
         const revenue = paymentsData?.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0) || 0;
-
-        // Fetch Recent Activity
-        const { data: recentSignups, error: recentErr } = await supabase
-          .from('profiles')
-          .select('name, created_at, status')
-          .eq('role', 'student')
-          .order('created_at', { ascending: false })
-          .limit(5);
-
-        if (totalErr || activeErr || pendingErr || menuErr || leaveErr || recentErr) {
-          console.error("Partial fetch error", { totalErr, activeErr });
-        }
 
         setStats({
           totalStudents: total || 0,
@@ -122,14 +109,6 @@ const AdminDashboard = () => {
           leaveRequests: leaveCount || 0,
           totalRevenue: revenue
         });
-
-        if (recentSignups) {
-          setRecentActivity(recentSignups.map(s => ({
-            text: `${s.name || 'New User'} signed up`,
-            time: new Date(s.created_at).toLocaleDateString(),
-            status: s.status
-          })));
-        }
 
       } catch (error) {
         console.error("Dashboard Error:", error);
@@ -141,22 +120,7 @@ const AdminDashboard = () => {
     fetchDashboardData();
 
     const realtime = supabase.channel('admin_dashboard')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'profiles' },
-        () => fetchDashboardData(true)
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'leave_requests' },
-        () => fetchDashboardData(true)
-      )
-      // Listen for config changes too
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'menu_items' },
-        () => fetchDashboardData(true)
-      )
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => fetchDashboardData(true))
       .subscribe();
 
     return () => {
@@ -198,6 +162,15 @@ const AdminDashboard = () => {
       setMessOpen(!newStatus); // Revert
       toast({ title: "Error", description: error.message || "Failed to update status", variant: "destructive" });
     } else {
+      // Send notification if mess is opening/closing
+      supabase.functions.invoke('send-notification', {
+        body: {
+          title: newStatus ? "✅ Mess is now OPEN" : "❌ Mess is now CLOSED",
+          body: newStatus ? "Lunch/Dinner is being served. Come on in!" : "The mess is closed for now.",
+          topic: "all_students"
+        }
+      });
+
       toast({
         title: newStatus ? "Mess Opened" : "Mess Closed",
         description: newStatus ? "Students can now see the mess is open." : "Students will see the mess is closed."
@@ -236,6 +209,16 @@ const AdminDashboard = () => {
       setMealReady(!newStatus);
       toast({ title: "Update Failed", variant: "destructive" });
     } else {
+      if (newStatus) {
+        // Only notify when ready
+        supabase.functions.invoke('send-notification', {
+          body: {
+            title: "🍱 Meal is READY!",
+            body: "The food is served and hot. Enjoy your meal!",
+            topic: "all_students"
+          }
+        });
+      }
       toast({ title: newStatus ? "Meal marked as Ready" : "Meal marked as Preparing" });
     }
   };
@@ -288,6 +271,13 @@ const AdminDashboard = () => {
       value: stats.leaveRequests,
       color: "text-purple-500",
       path: "/admin/leaves"
+    },
+    {
+      icon: Bell,
+      label: "Notifications",
+      value: "Manage",
+      color: "text-orange-500",
+      path: "/admin/notifications"
     },
     {
       icon: MessageCircle,
@@ -377,7 +367,8 @@ const AdminDashboard = () => {
                 </div>
               </button>
             </div>
-            <div className="grid grid-cols-2 gap-3 mt-6">
+
+            <div className="grid grid-cols-2 gap-3 mt-6 pb-20">
               {statCards.map((stat) => (
                 <button
                   key={stat.label}

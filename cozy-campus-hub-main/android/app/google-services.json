@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "541064791428",
+    "project_id": "cozy-campus",
+    "storage_bucket": "cozy-campus.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:541064791428:android:254aa36941696ba9fd89d1",
+        "android_client_info": {
+          "package_name": "com.chirag.messbuddy"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCeCn6RBKCMaj4N3l_P2RHRbhI9uer4G1Y"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
