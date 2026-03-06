@@ -139,12 +139,26 @@ const AdminStudents = () => {
     try {
       const hasRequest = student.requested_plan && student.requested_plan_start_date && student.requested_plan_start_date.length > 5;
 
+      let planEndDate = null;
+      if (hasRequest) {
+        const startDate = new Date(student.requested_plan_start_date);
+        planEndDate = new Date(startDate);
+        const isMonthly = student.requested_plan.includes("Monthly");
+        if (isMonthly) {
+          const daysInMonth = new Date(startDate.getFullYear(), startDate.getMonth() + 1, 0).getDate();
+          planEndDate.setDate(startDate.getDate() + daysInMonth);
+        } else if (student.requested_plan.includes("Day") || student.requested_plan.includes("Time")) {
+          planEndDate.setDate(startDate.getDate() + 1);
+        }
+      }
+
       const { error } = await supabase
         .from('profiles')
         .update({
           status: hasRequest ? 'active' : 'approved',
           plan: hasRequest ? student.requested_plan : null,
-          plan_end_date: hasRequest ? student.requested_plan_start_date : null,
+          plan_start_date: hasRequest ? student.requested_plan_start_date : null,
+          plan_end_date: hasRequest ? planEndDate?.toISOString() : null,
           pending_amount: hasRequest ? (Number(student.requested_pending_amount) || 0) : 0
         })
         .eq('id', student.id);
