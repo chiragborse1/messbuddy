@@ -26,6 +26,10 @@ const LandingPage = () => {
         }
     }, [user, authLoading, navigate]);
 
+    if (authLoading || user) {
+        return <div className="min-h-screen bg-[#0C0F14] flex items-center justify-center"></div>;
+    }
+
     return (
         <div className="min-h-screen relative overflow-hidden font-sans">
             {/* Background Image with Overlay */}
