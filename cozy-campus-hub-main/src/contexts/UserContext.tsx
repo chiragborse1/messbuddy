@@ -15,6 +15,7 @@ export interface UserData {
     daysRemaining?: number; // Calculated or stored
     plan?: string;
     onLeave?: boolean;
+    planStartDate?: string;
     planEndDate?: string;
     pendingAmount?: number;
 }
@@ -48,6 +49,7 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
                 setUser({
                     ...data,
                     // map snake_case to camelCase
+                    planStartDate: data.plan_start_date,
                     planEndDate: data.plan_end_date,
                     photo: data.photo_url,
                     onLeave: data.on_leave,
@@ -144,6 +146,7 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
         if (updates.photo) dbUpdates.photo_url = updates.photo;
         if (updates.status) dbUpdates.status = updates.status;
         if (updates.plan) dbUpdates.plan = updates.plan;
+        if (updates.planStartDate) dbUpdates.plan_start_date = updates.planStartDate;
         if (updates.planEndDate) dbUpdates.plan_end_date = updates.planEndDate;
         if (updates.pendingAmount !== undefined) dbUpdates.pending_amount = updates.pendingAmount;
 

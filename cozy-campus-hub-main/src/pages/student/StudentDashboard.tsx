@@ -192,14 +192,19 @@ const StudentDashboard = () => {
 
           {/* Quick Info */}
           <div className="grid grid-cols-2 gap-3">
-            <div className="bg-card rounded-2xl p-4 border border-border/50 shadow-sm">
-              <CalendarDays className="w-5 h-5 text-primary mb-2" />
-              <p className="text-xs text-muted-foreground">Plan Ends</p>
-              <p className="text-sm font-semibold">
-                {user.planEndDate
-                  ? new Date(user.planEndDate).toLocaleDateString("en-GB")
-                  : "N/A"}
-              </p>
+            <div className="bg-card rounded-2xl p-3 border border-border/50 shadow-sm flex flex-col justify-center">
+              <CalendarDays className="w-5 h-5 text-primary mb-1.5" />
+              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Plan Duration</p>
+              <div className="space-y-1.5 w-full">
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-xs text-muted-foreground">Start</span>
+                  <span className="font-semibold">{user.planStartDate ? new Date(user.planStartDate).toLocaleDateString("en-GB", { day: '2-digit', month: 'short' }) : "N/A"}</span>
+                </div>
+                <div className="flex justify-between items-center text-sm pt-1 border-t border-border/50">
+                  <span className="text-xs text-muted-foreground">End</span>
+                  <span className="font-semibold">{user.planEndDate ? new Date(user.planEndDate).toLocaleDateString("en-GB", { day: '2-digit', month: 'short' }) : "N/A"}</span>
+                </div>
+              </div>
             </div>
             <div className="bg-card rounded-2xl p-4 border border-border/50 shadow-sm">
               <Clock className="w-5 h-5 text-accent mb-2" />

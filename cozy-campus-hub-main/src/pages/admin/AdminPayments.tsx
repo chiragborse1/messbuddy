@@ -137,6 +137,7 @@ const AdminPayments = () => {
 
           await supabase.from('profiles').update({
             plan: basePlanName,
+            plan_start_date: startDate.toISOString(),
             plan_end_date: newEndDate.toISOString(),
             status: 'active',
             pending_amount: newPendingAmount
