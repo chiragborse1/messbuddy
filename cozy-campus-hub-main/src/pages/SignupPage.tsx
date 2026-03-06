@@ -22,7 +22,7 @@ const SignupPage = () => {
     password: "",
     isExistingMember: false,
     requestedPlan: "",
-    requestedPlanEndDate: "",
+    requestedPlanStartDate: "",
     hasPendingAmount: false,
     pendingAmount: "0",
   });
@@ -80,7 +80,7 @@ const SignupPage = () => {
             role: 'student',
             status: 'pending',
             requested_plan: formData.isExistingMember ? formData.requestedPlan : null,
-            requested_plan_end_date: formData.isExistingMember ? formData.requestedPlanEndDate : null,
+            requested_plan_start_date: formData.isExistingMember ? formData.requestedPlanStartDate : null,
             requested_pending_amount: formData.isExistingMember && formData.hasPendingAmount ? Number(formData.pendingAmount) : 0
           }
         }
@@ -279,12 +279,12 @@ const SignupPage = () => {
                   </select>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="requestedPlanEndDate" className="text-sm font-medium">End Date</Label>
+                  <Label htmlFor="requestedPlanStartDate" className="text-sm font-medium">Start Date</Label>
                   <Input
-                    id="requestedPlanEndDate"
+                    id="requestedPlanStartDate"
                     type="date"
-                    value={formData.requestedPlanEndDate}
-                    onChange={(e) => setFormData({ ...formData, requestedPlanEndDate: e.target.value })}
+                    value={formData.requestedPlanStartDate}
+                    onChange={(e) => setFormData({ ...formData, requestedPlanStartDate: e.target.value })}
                     required={formData.isExistingMember}
                   />
                 </div>
