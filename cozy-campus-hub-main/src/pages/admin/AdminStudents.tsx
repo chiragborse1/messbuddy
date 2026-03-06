@@ -647,8 +647,9 @@ const AdminStudents = () => {
                 <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Pending Balance (₹)</Label>
                 <Input
                   type="number"
-                  value={adjustmentBalance}
-                  onChange={(e) => setAdjustmentBalance(Number(e.target.value))}
+                  placeholder="0"
+                  value={adjustmentBalance === 0 ? '' : adjustmentBalance}
+                  onChange={(e) => setAdjustmentBalance(e.target.value === '' ? 0 : Number(e.target.value))}
                   className="h-11 rounded-xl font-bold"
                 />
               </div>
