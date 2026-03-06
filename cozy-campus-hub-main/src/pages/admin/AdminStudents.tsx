@@ -137,14 +137,14 @@ const AdminStudents = () => {
 
   const handleApprove = async (student: any) => {
     try {
-      const hasRequest = student.requested_plan && student.requested_plan_end_date && student.requested_plan_end_date.length > 5;
+      const hasRequest = student.requested_plan && student.requested_plan_start_date && student.requested_plan_start_date.length > 5;
 
       const { error } = await supabase
         .from('profiles')
         .update({
           status: hasRequest ? 'active' : 'approved',
           plan: hasRequest ? student.requested_plan : null,
-          plan_end_date: hasRequest ? student.requested_plan_end_date : null,
+          plan_end_date: hasRequest ? student.requested_plan_start_date : null,
           pending_amount: hasRequest ? (Number(student.requested_pending_amount) || 0) : 0
         })
         .eq('id', student.id);
@@ -458,8 +458,8 @@ const AdminStudents = () => {
                                   <p className="font-bold text-foreground">{s.requested_plan}</p>
                                 </div>
                                 <div>
-                                  <p className="text-[10px] text-muted-foreground font-semibold uppercase">Plan End Date</p>
-                                  <p className="font-bold text-foreground">{formatDate(s.requested_plan_end_date)}</p>
+                                  <p className="text-[10px] text-muted-foreground font-semibold uppercase">Plan Start Date</p>
+                                  <p className="font-bold text-foreground">{formatDate(s.requested_plan_start_date)}</p>
                                 </div>
                               </div>
 
