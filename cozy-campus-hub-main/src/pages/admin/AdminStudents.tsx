@@ -78,7 +78,17 @@ const AdminStudents = () => {
   };
 
   const confirmAdjustment = async () => {
-    if (!adjustingStudent || adjustmentDays === 0) return;
+    if (!adjustingStudent) return;
+
+    // Check if any change has actually been made
+    const hasDaysChange = adjustmentDays !== 0;
+    const hasPlanChange = adjustmentPlan !== adjustingStudent.plan;
+    const hasBalanceChange = adjustmentBalance !== (adjustingStudent.pending_amount || 0);
+
+    if (!hasDaysChange && !hasPlanChange && !hasBalanceChange) {
+      toast({ title: "No changes detected", description: "You haven't adjusted any values." });
+      return;
+    }
 
     // Use today as the base if there's no existing plan_end_date
     const baseDate = adjustingStudent.plan_end_date
@@ -87,6 +97,7 @@ const AdminStudents = () => {
     baseDate.setDate(baseDate.getDate() + adjustmentDays);
 
     // If the resulting date is in the future, make student active; otherwise keep current status
+    // Or if they just bought a new plan and days > 0
     const newStatus = baseDate > new Date() ? 'active' : adjustingStudent.status;
 
     try {
@@ -103,8 +114,8 @@ const AdminStudents = () => {
       if (error) throw error;
 
       toast({
-        title: "Plan Updated",
-        description: `Plan ${adjustmentDays > 0 ? 'extended' : 'reduced'} by ${Math.abs(adjustmentDays)} day(s). Status: ${newStatus}.`
+        title: "Plan Updated Successfully",
+        description: `Plan: ${adjustmentPlan || 'None'}, Days adjusted: ${adjustmentDays > 0 ? '+' : ''}${adjustmentDays}, Base changed to ₹${adjustmentBalance}`
       });
 
       setAdjustingStudent(null); // Close drawer
