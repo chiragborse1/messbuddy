@@ -17,7 +17,7 @@ const StudentDashboard = () => {
   // Determine next meal based on time (cutoff 3 PM)
   const nextMeal = new Date().getHours() < 15 ? "Lunch, 12:30 PM" : "Dinner, 7:30 PM";
 
-  const { data: statusData } = useQuery({
+  const { data: statusData, refetch } = useQuery({
     queryKey: ['mess-status'],
     queryFn: async () => {
       // Mess Status
@@ -54,11 +54,30 @@ const StudentDashboard = () => {
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'menu_items' },
-        () => {
-          queryClient.invalidateQueries({ queryKey: ['mess-status'] });
+        (payload) => {
+          console.log("Realtime table update observed:", payload);
+          refetch();
         }
       )
-      .subscribe();
+      .on(
+        'broadcast',
+        { event: 'mess_toggled' },
+        (payload) => {
+          console.log("Broadcast received: mess_toggled", payload);
+          refetch();
+        }
+      )
+      .on(
+        'broadcast',
+        { event: 'meal_toggled' },
+        (payload) => {
+          console.log("Broadcast received: meal_toggled", payload);
+          refetch();
+        }
+      )
+      .subscribe((status) => {
+        console.log("Student Board Channel Status:", status);
+      });
 
     return () => {
       supabase.removeChannel(channel);
