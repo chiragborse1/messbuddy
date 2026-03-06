@@ -10,8 +10,10 @@ import { toast } from "@/hooks/use-toast";
 import { MessReceiptTicket } from "@/components/ui/ticket-confirmation-card";
 
 const plans = [
-  { id: 1, label: "Boys Monthly Mess", price: 1300, desc: "Full month access for boys" },
-  { id: 2, label: "Girls Monthly Mess", price: 1000, desc: "Full month access for girls" },
+  { id: 1, label: "Boys Monthly Mess (1 Time)", price: 1300, desc: "1 meal/day access for boys" },
+  { id: 2, label: "Girls Monthly Mess (1 Time)", price: 1000, desc: "1 meal/day access for girls" },
+  { id: 7, label: "Boys Monthly Mess (2 Times)", price: 2200, desc: "2 meals/day access for boys" },
+  { id: 8, label: "Girls Monthly Mess (2 Times)", price: 1600, desc: "2 meals/day access for girls" },
   { id: 3, label: "Boys 1 Day Mess", price: 120, desc: "24-hour access for boys" },
   { id: 4, label: "Girls 1 Day Mess", price: 80, desc: "24-hour access for girls" },
   { id: 5, label: "Boys 1 Time Mess", price: 80, desc: "Single meal choice for boys" },
