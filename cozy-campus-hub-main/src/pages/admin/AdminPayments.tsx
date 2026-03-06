@@ -87,6 +87,10 @@ const AdminPayments = () => {
           const planPrices: Record<string, number> = {
             "Boys Monthly Mess": 1300,
             "Girls Monthly Mess": 1000,
+            "Boys Monthly Mess (1 Time)": 1300,
+            "Girls Monthly Mess (1 Time)": 1000,
+            "Boys Monthly Mess (2 Times)": 2200,
+            "Girls Monthly Mess (2 Times)": 1600,
             "Boys 1 Day Mess": 120,
             "Girls 1 Day Mess": 80,
             "Boys 1 Time Mess": 80,

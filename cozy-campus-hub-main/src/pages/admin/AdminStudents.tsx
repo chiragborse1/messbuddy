@@ -606,8 +606,10 @@ const AdminStudents = () => {
                   onChange={(e) => setAdjustmentPlan(e.target.value)}
                 >
                   <option value="">No Plan</option>
-                  <option value="Boys Monthly Mess">Boys Monthly Mess (₹1300)</option>
-                  <option value="Girls Monthly Mess">Girls Monthly Mess (₹1000)</option>
+                  <option value="Boys Monthly Mess (1 Time)">Boys Monthly Mess (1 Time) (₹1300)</option>
+                  <option value="Girls Monthly Mess (1 Time)">Girls Monthly Mess (1 Time) (₹1000)</option>
+                  <option value="Boys Monthly Mess (2 Times)">Boys Monthly Mess (2 Times) (₹2200)</option>
+                  <option value="Girls Monthly Mess (2 Times)">Girls Monthly Mess (2 Times) (₹1600)</option>
                   <option value="Boys 1 Day Mess">Boys 1 Day Mess (₹120)</option>
                   <option value="Girls 1 Day Mess">Girls 1 Day Mess (₹80)</option>
                   <option value="Boys 1 Time Mess">Boys 1 Time Mess (₹80)</option>
