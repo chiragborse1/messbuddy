@@ -58,6 +58,7 @@ Current migration:
 - `supabase/migrations/20260530183500_student_submission_guards.sql`
 - `supabase/migrations/20260530184000_active_student_access_guards.sql`
 - `supabase/migrations/20260530184500_admin_revenue_rpcs.sql`
+- `supabase/migrations/20260530185000_add_profile_on_leave.sql`
 
 Deploy Edge Functions:
 

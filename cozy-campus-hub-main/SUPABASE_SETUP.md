@@ -24,6 +24,7 @@ Current migration:
 - `20260530183500_student_submission_guards.sql` - restricts student-created payments/leaves to safe pending records.
 - `20260530184000_active_student_access_guards.sql` - blocks inactive student accounts from student data APIs and voting.
 - `20260530184500_admin_revenue_rpcs.sql` - moves admin revenue aggregation into Postgres RPCs.
+- `20260530185000_add_profile_on_leave.sql` - adds the `profiles.on_leave` flag used by leave approvals.
 
 Apply migrations to the linked Supabase project:
 
