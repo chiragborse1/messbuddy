@@ -7,23 +7,34 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/hooks/use-toast";
 
+const defaultStats = {
+  totalStudents: 0,
+  activeStudents: 0,
+  pendingRequests: 0,
+  menuItems: 0,
+  leaveRequests: 0,
+  totalRevenue: 0
+};
+
+type DashboardData = {
+  stats: typeof defaultStats;
+  messOpen: boolean;
+  messConfigId: number | null;
+  mealReady: boolean;
+  mealConfigId: number | null;
+};
+
+let cachedDashboardData: DashboardData | null = null;
+
 const AdminDashboard = () => {
   const { user, loading: authLoading } = useUser();
   const navigate = useNavigate();
-  const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState({
-    totalStudents: 0,
-    activeStudents: 0,
-    pendingRequests: 0,
-    menuItems: 0,
-    leaveRequests: 0,
-    totalRevenue: 0
-  });
-  const [messOpen, setMessOpen] = useState(true);
-  const [messConfigId, setMessConfigId] = useState<number | null>(null);
-  const [mealReady, setMealReady] = useState(false);
-  const [mealConfigId, setMealConfigId] = useState<number | null>(null);
-  const [recentActivity, setRecentActivity] = useState<any[]>([]);
+  const [loading, setLoading] = useState(!cachedDashboardData);
+  const [stats, setStats] = useState(cachedDashboardData?.stats ?? defaultStats);
+  const [messOpen, setMessOpen] = useState(cachedDashboardData?.messOpen ?? true);
+  const [messConfigId, setMessConfigId] = useState<number | null>(cachedDashboardData?.messConfigId ?? null);
+  const [mealReady, setMealReady] = useState(cachedDashboardData?.mealReady ?? false);
+  const [mealConfigId, setMealConfigId] = useState<number | null>(cachedDashboardData?.mealConfigId ?? null);
 
   useEffect(() => {
     // 1. Wait for Auth Check
@@ -36,84 +47,88 @@ const AdminDashboard = () => {
     }
 
     const fetchDashboardData = async (silent = false) => {
-      if (!silent) setLoading(true);
+      const showInitialLoader = !silent && !cachedDashboardData;
+      if (showInitialLoader) setLoading(true);
+
       try {
-        // 1. Fetch Mess Status (Config) & ID
-        const { data: configData } = await supabase
-          .from('menu_items')
-          .select('id, votes')
-          .eq('category', 'config')
-          .eq('name', 'mess_status')
-          .maybeSingle();
+        const today = new Date().toISOString();
+        const [
+          configResult,
+          mealResult,
+          totalResult,
+          activeResult,
+          pendingResult,
+          menuCountResult,
+          leaveCountResult,
+          paymentsResult
+        ] = await Promise.all([
+          supabase
+            .from('menu_items')
+            .select('id, votes')
+            .eq('category', 'config')
+            .eq('name', 'mess_status')
+            .maybeSingle(),
+          supabase
+            .from('menu_items')
+            .select('id, votes')
+            .eq('category', 'config')
+            .eq('name', 'meal_status')
+            .maybeSingle(),
+          supabase
+            .from('profiles')
+            .select('*', { count: 'exact', head: true })
+            .eq('role', 'student'),
+          supabase
+            .from('profiles')
+            .select('*', { count: 'exact', head: true })
+            .eq('role', 'student')
+            .gt('plan_end_date', today),
+          supabase
+            .from('profiles')
+            .select('*', { count: 'exact', head: true })
+            .eq('role', 'student')
+            .eq('status', 'pending'),
+          supabase
+            .from('menu_items')
+            .select('*', { count: 'exact', head: true })
+            .neq('category', 'config'),
+          supabase
+            .from('leave_requests')
+            .select('*', { count: 'exact', head: true })
+            .eq('status', 'pending'),
+          supabase
+            .from('payments')
+            .select('amount')
+            .eq('status', 'approved')
+        ]);
 
-        if (configData) {
-          setMessOpen(configData.votes === 1);
-          setMessConfigId(configData.id);
-        } else {
-          setMessOpen(true);
-        }
+        const revenue = paymentsResult.data?.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0) || 0;
+        const nextData: DashboardData = {
+          stats: {
+            totalStudents: totalResult.count || 0,
+            activeStudents: activeResult.count || 0,
+            pendingRequests: pendingResult.count || 0,
+            menuItems: menuCountResult.count || 0,
+            leaveRequests: leaveCountResult.count || 0,
+            totalRevenue: revenue
+          },
+          messOpen: configResult.data ? configResult.data.votes === 1 : true,
+          messConfigId: configResult.data?.id ?? null,
+          mealReady: mealResult.data ? mealResult.data.votes === 1 : false,
+          mealConfigId: mealResult.data?.id ?? null
+        };
 
-        // 1b. Fetch Meal Status (Config)
-        const { data: mealData } = await supabase
-          .from('menu_items')
-          .select('id, votes')
-          .eq('category', 'config')
-          .eq('name', 'meal_status')
-          .maybeSingle();
-
-        if (mealData) {
-          setMealReady(mealData.votes === 1);
-          setMealConfigId(mealData.id);
-        }
-
-        // 2. Fetch Student Counts
-        const { count: total } = await supabase
-          .from('profiles')
-          .select('*', { count: 'exact', head: true })
-          .eq('role', 'student');
-
-        const { count: active } = await supabase
-          .from('profiles')
-          .select('*', { count: 'exact', head: true })
-          .eq('role', 'student')
-          .gt('plan_end_date', new Date().toISOString());
-
-        const { count: pending } = await supabase
-          .from('profiles')
-          .select('*', { count: 'exact', head: true })
-          .eq('role', 'student')
-          .eq('status', 'pending');
-
-        const { count: menuCount } = await supabase
-          .from('menu_items')
-          .select('*', { count: 'exact', head: true })
-          .neq('category', 'config');
-
-        const { count: leaveCount } = await supabase
-          .from('leave_requests')
-          .select('*', { count: 'exact', head: true })
-          .eq('status', 'pending');
-
-        const { data: paymentsData } = await supabase
-          .from('payments')
-          .select('amount')
-          .eq('status', 'approved');
-
-        const revenue = paymentsData?.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0) || 0;
-
-        setStats({
-          totalStudents: total || 0,
-          activeStudents: active || 0,
-          pendingRequests: pending || 0,
-          menuItems: menuCount || 0,
-          leaveRequests: leaveCount || 0,
-          totalRevenue: revenue
-        });
+        cachedDashboardData = nextData;
+        setStats(nextData.stats);
+        setMessOpen(nextData.messOpen);
+        setMessConfigId(nextData.messConfigId);
+        setMealReady(nextData.mealReady);
+        setMealConfigId(nextData.mealConfigId);
 
       } catch (error) {
         console.error("Dashboard Error:", error);
       } finally {
-        if (!silent) setLoading(false);
+        if (showInitialLoader) setLoading(false);
       }
     };
 
@@ -131,6 +146,9 @@ const AdminDashboard = () => {
   const toggleMessStatus = async () => {
     const newStatus = !messOpen;
     setMessOpen(newStatus); // Optimistic
+    if (cachedDashboardData) {
+      cachedDashboardData = { ...cachedDashboardData, messOpen: newStatus };
+    }
 
     let error = null;
 
@@ -154,12 +172,18 @@ const AdminDashboard = () => {
         .single();
 
       if (data) setMessConfigId(data.id);
+      if (data && cachedDashboardData) {
+        cachedDashboardData = { ...cachedDashboardData, messConfigId: data.id };
+      }
       error = insertError;
     }
 
     if (error) {
       console.error("Toggle error:", error);
       setMessOpen(!newStatus); // Revert
+      if (cachedDashboardData) {
+        cachedDashboardData = { ...cachedDashboardData, messOpen: !newStatus };
+      }
       toast({ title: "Error", description: error.message || "Failed to update status", variant: "destructive" });
     } else {
       // Send notification if mess is opening/closing
@@ -193,6 +217,9 @@ const AdminDashboard = () => {
   const toggleMealStatus = async () => {
     const newStatus = !mealReady;
     setMealReady(newStatus); // Optimistic
+    if (cachedDashboardData) {
+      cachedDashboardData = { ...cachedDashboardData, mealReady: newStatus };
+    }
 
     let error = null;
 
@@ -214,11 +241,17 @@ const AdminDashboard = () => {
         .single();
 
       if (data) setMealConfigId(data.id);
+      if (data && cachedDashboardData) {
+        cachedDashboardData = { ...cachedDashboardData, mealConfigId: data.id };
+      }
       error = insertError;
     }
 
     if (error) {
       setMealReady(!newStatus);
+      if (cachedDashboardData) {
+        cachedDashboardData = { ...cachedDashboardData, mealReady: !newStatus };
+      }
       toast({ title: "Update Failed", variant: "destructive" });
     } else {
       if (newStatus) {
