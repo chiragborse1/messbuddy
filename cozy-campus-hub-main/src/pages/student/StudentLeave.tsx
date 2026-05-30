@@ -2,10 +2,9 @@ import { useState, useEffect, useCallback } from "react";
 import PageShell from "@/components/PageShell";
 import StudentBottomNav from "@/components/StudentBottomNav";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { CalendarIcon, CalendarOff, RotateCcw, CheckCircle2, History, Loader2, ArrowLeft } from "lucide-react";
+import { CalendarIcon, CalendarOff, RotateCcw, History, Loader2, ArrowLeft } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/supabase";
 import { useUser } from "@/hooks/useUser";
@@ -20,12 +19,14 @@ import {
 
 const StudentLeave = () => {
   const { user } = useUser();
-  const [tab, setTab] = useState<"leave" | "return">("leave");
   const [loading, setLoading] = useState(false);
   const [requests, setRequests] = useState<any[]>([]);
 
   // Form State
-  const [date, setDate] = useState<Date | undefined>(undefined);
+  const [leaveDate, setLeaveDate] = useState<Date | undefined>(undefined);
+  const [returnDate, setReturnDate] = useState<Date | undefined>(undefined);
+  const [leavePickerOpen, setLeavePickerOpen] = useState(false);
+  const [returnPickerOpen, setReturnPickerOpen] = useState(false);
   const [reason, setReason] = useState("");
 
   const fetchRequests = useCallback(async () => {
@@ -59,25 +60,62 @@ const StudentLeave = () => {
     }
   }, [user?.id, fetchRequests]);
 
+  const today = new Date(new Date().setHours(0, 0, 0, 0));
+
+  const toDateOnly = (value: Date) => new Date(value.getFullYear(), value.getMonth(), value.getDate());
+
+  const isReturnDateInvalid = (dateToCheck: Date) => {
+    if (dateToCheck < today) return true;
+    if (!leaveDate) return true;
+    return toDateOnly(dateToCheck).getTime() <= toDateOnly(leaveDate).getTime();
+  };
+
+  const handleLeaveDateSelect = (selected?: Date) => {
+    if (!selected) return;
+
+    setLeaveDate(selected);
+    if (returnDate && toDateOnly(returnDate).getTime() <= toDateOnly(selected).getTime()) {
+      setReturnDate(undefined);
+    }
+    setLeavePickerOpen(false);
+    window.setTimeout(() => setReturnPickerOpen(true), 0);
+  };
+
+  const handleReturnDateSelect = (selected?: Date) => {
+    if (!selected) return;
+
+    setReturnDate(selected);
+    setReturnPickerOpen(false);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
-    if (!date) {
-      toast({ title: "Date Required", description: "Please select a date.", variant: "destructive" });
+    if (!leaveDate) {
+      toast({ title: "Leave Date Required", description: "Please select when you are leaving.", variant: "destructive" });
+      return;
+    }
+    if (!returnDate) {
+      toast({ title: "Return Date Required", description: "Please select when you are returning.", variant: "destructive" });
+      setReturnPickerOpen(true);
+      return;
+    }
+    if (toDateOnly(returnDate).getTime() <= toDateOnly(leaveDate).getTime()) {
+      toast({ title: "Invalid Return Date", description: "Return date must be after the leave date.", variant: "destructive" });
       return;
     }
 
     setLoading(true);
     try {
-      const dateString = format(date, "yyyy-MM-dd");
+      const leaveDateString = format(leaveDate, "yyyy-MM-dd");
+      const returnDateString = format(returnDate, "yyyy-MM-dd");
 
-      const typeLabel = tab === "leave" ? "LEAVE" : "RETURN";
-      const finalReason = `[${typeLabel}] ${reason}`;
+      const finalReason = `[LEAVE] ${reason.trim()}`;
 
       const { data: requestRecord, error } = await supabase.from('leave_requests').insert({
         user_id: user.id,
-        start_date: dateString,
-        end_date: dateString, // Same day for single event record
+        start_date: leaveDateString,
+        end_date: returnDateString,
         reason: finalReason,
         status: 'pending'
       }).select('id').single();
@@ -93,8 +131,9 @@ const StudentLeave = () => {
         }
       });
 
-      toast({ title: "Request Submitted", description: `Your ${tab} request is pending approval.` });
-      setDate(undefined);
+      toast({ title: "Request Submitted", description: "Your leave request is pending approval." });
+      setLeaveDate(undefined);
+      setReturnDate(undefined);
       setReason("");
       fetchRequests(); // Refresh history
     } catch (error: any) {
@@ -107,7 +146,10 @@ const StudentLeave = () => {
 
   const formatDate = (dateStr: string) => {
     if (!dateStr) return "";
-    return new Date(dateStr).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+    const [datePart] = dateStr.split("T");
+    const [year, month, day] = datePart.split("-").map(Number);
+    if (!year || !month || !day) return "";
+    return new Date(year, month - 1, day).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
   };
 
   const [showHistory, setShowHistory] = useState(false);
@@ -117,7 +159,7 @@ const StudentLeave = () => {
   return (
     <>
       <PageShell
-        title={showHistory ? "Request History" : "Leave/Return"}
+        title={showHistory ? "Request History" : "Leave Request"}
         subtitle={showHistory ? "Your past requests" : "Manage your mess availability"}
         action={
           <Button
@@ -143,6 +185,7 @@ const StudentLeave = () => {
               ) : (
                 requests.map((r) => {
                   const isReturn = r.reason?.startsWith("[RETURN]");
+                  const isRangeLeave = !isReturn && r.end_date && r.end_date !== r.start_date;
                   const displayReason = r.reason ? r.reason.replace(/^\[.*?\]\s*/, "") : "";
 
                   return (
@@ -153,7 +196,7 @@ const StudentLeave = () => {
                         </div>
                         <div>
                           <p className="font-semibold text-sm">
-                            {isReturn ? "Return" : "Leave"} on {formatDate(r.start_date)}
+                            {isReturn ? "Return" : "Leave"} {isRangeLeave ? `${formatDate(r.start_date)} - ${formatDate(r.end_date)}` : `on ${formatDate(r.start_date)}`}
                           </p>
                           {displayReason && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{displayReason}</p>}
                           <p className="text-[10px] text-muted-foreground mt-1">Submitted: {formatDate(r.created_at)}</p>
@@ -177,74 +220,95 @@ const StudentLeave = () => {
           ) : (
             /* Main Form View */
             <div>
-              {/* Tabs */}
-              <div className="flex bg-muted rounded-xl p-1 mb-6">
-                <button
-                  onClick={() => setTab("leave")}
-                  className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-medium rounded-lg transition-all ${tab === "leave" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"
-                    }`}
-                >
-                  <CalendarOff className="w-4 h-4" />
-                  Leave
-                </button>
-                <button
-                  onClick={() => setTab("return")}
-                  className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-medium rounded-lg transition-all ${tab === "return" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"
-                    }`}
-                >
-                  <RotateCcw className="w-4 h-4" />
-                  Return
-                </button>
-              </div>
-
               {/* Form */}
               <div className="bg-card border border-border/50 rounded-2xl p-5 shadow-sm mb-6">
                 <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                  {tab === "leave" ? <CalendarOff className="w-5 h-5 text-red-500" /> : <RotateCcw className="w-5 h-5 text-green-500" />}
-                  {tab === "leave" ? "Apply for Leave" : "Report Return"}
+                  <CalendarOff className="w-5 h-5 text-red-500" />
+                  Apply for Leave
                 </h2>
                 <form onSubmit={handleSubmit} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label>{tab === "leave" ? "Start Date (Leaving On)" : "Return Date (Joining From)"}</Label>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant={"outline"}
-                          className={cn(
-                            "w-full justify-start text-left font-normal h-12 rounded-xl border-border/50",
-                            !date && "text-muted-foreground"
-                          )}
-                          type="button" // Prevent form submission
-                        >
-                          <CalendarIcon className="mr-2 h-4 w-4" />
-                          {date ? format(date, "PPP") : <span>Pick a date</span>}
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar
-                          mode="single"
-                          selected={date}
-                          onSelect={setDate}
-                          initialFocus
-                          disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
-                        />
-                      </PopoverContent>
-                    </Popover>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      <Label>Leave Date</Label>
+                      <Popover open={leavePickerOpen} onOpenChange={setLeavePickerOpen}>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant={"outline"}
+                            className={cn(
+                              "w-full justify-start text-left font-normal h-12 rounded-xl border-border/50",
+                              !leaveDate && "text-muted-foreground"
+                            )}
+                            type="button"
+                          >
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {leaveDate ? format(leaveDate, "d MMM") : <span>Pick date</span>}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar
+                            mode="single"
+                            selected={leaveDate}
+                            onSelect={handleLeaveDateSelect}
+                            initialFocus
+                            disabled={(date) => date < today}
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Return Date</Label>
+                      <Popover open={returnPickerOpen} onOpenChange={setReturnPickerOpen}>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant={"outline"}
+                            className={cn(
+                              "w-full justify-start text-left font-normal h-12 rounded-xl border-border/50",
+                              !returnDate && "text-muted-foreground"
+                            )}
+                            type="button"
+                            disabled={!leaveDate}
+                          >
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {returnDate ? format(returnDate, "d MMM") : <span>Pick date</span>}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar
+                            mode="single"
+                            selected={returnDate}
+                            onSelect={handleReturnDateSelect}
+                            initialFocus
+                            disabled={isReturnDateInvalid}
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-dashed border-border bg-muted/30 p-3 text-xs text-muted-foreground">
+                    {!leaveDate
+                      ? "Select your leave date first. The return date picker will open automatically."
+                      : !returnDate
+                        ? "Now select the date you will return to the mess."
+                        : `Leave period: ${format(leaveDate, "d MMM yyyy")} to ${format(returnDate, "d MMM yyyy")}`}
                   </div>
 
                   <div className="space-y-2">
                     <Label>Reason / Note</Label>
                     <Textarea
-                      placeholder={tab === "leave" ? "Going home for festival..." : "Bus arrives at 10 AM..."}
+                      placeholder="Going home for festival..."
                       className="rounded-xl min-h-[80px]"
                       value={reason}
                       onChange={(e) => setReason(e.target.value)}
                     />
                   </div>
 
-                  <Button type="submit" className="w-full h-12 rounded-xl text-base font-semibold" disabled={loading}>
-                    {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : (tab === "leave" ? "Submit Leave Request" : "Submit Return Request")}
-                  </Button>
+                  {leaveDate && returnDate && (
+                    <Button type="submit" className="w-full h-12 rounded-xl text-base font-semibold" disabled={loading}>
+                      {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : "Submit Leave Request"}
+                    </Button>
+                  )}
                 </form>
               </div>
             </div>

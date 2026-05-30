@@ -57,6 +57,53 @@ const AdminLeaves = () => {
     };
   }, []);
 
+  const parseDateOnly = (dateStr: string) => {
+    const [datePart] = String(dateStr || "").split("T");
+    const [year, month, day] = datePart.split("-").map(Number);
+    if (!year || !month || !day) return null;
+    return new Date(year, month - 1, day);
+  };
+
+  const getLeaveDays = (startDate: string, endDate: string) => {
+    const start = parseDateOnly(startDate);
+    const end = parseDateOnly(endDate);
+    if (!start || !end) return 0;
+
+    const diffDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+    return Math.max(0, diffDays);
+  };
+
+  const extendPlanByDays = async (userId: string, days: number) => {
+    if (days <= 0) return;
+
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('plan_end_date')
+      .eq('id', userId)
+      .single();
+
+    if (profile?.plan_end_date) {
+      const currentEnd = new Date(profile.plan_end_date);
+      currentEnd.setDate(currentEnd.getDate() + days);
+
+      await supabase.from('profiles').update({
+        plan_end_date: currentEnd.toISOString()
+      }).eq('id', userId);
+
+      toast({ title: "Plan Extended", description: `Added ${days} days to student plan.` });
+    }
+  };
+
+  const isCurrentDateInLeaveRange = (startDate: string, endDate: string) => {
+    const start = parseDateOnly(startDate);
+    const end = parseDateOnly(endDate);
+    if (!start || !end) return false;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return today.getTime() >= start.getTime() && today.getTime() < end.getTime();
+  };
+
   const updateStatus = async (id: number, status: string) => {
     try {
       const { error } = await supabase
@@ -66,22 +113,31 @@ const AdminLeaves = () => {
 
       if (error) throw error;
 
+      const request = requests.find(r => r.id === id);
+
       // Auto-update on_leave status in profile
       if (status === 'approved') {
-        const request = requests.find(r => r.id === id);
         if (request?.reason?.startsWith('[LEAVE]')) {
-          await supabase.from('profiles').update({ on_leave: true }).eq('id', request.user_id);
+          const isRangeLeave = request.end_date && request.end_date !== request.start_date;
+          await supabase
+            .from('profiles')
+            .update({ on_leave: isRangeLeave ? isCurrentDateInLeaveRange(request.start_date, request.end_date) : true })
+            .eq('id', request.user_id);
         } else if (request?.reason?.startsWith('[RETURN]')) {
           await supabase.from('profiles').update({ on_leave: false }).eq('id', request.user_id);
         }
       }
 
-      // Logic to extend plan if this is a RETURN approval
-      if (status === 'approved') {
-        const request = requests.find(r => r.id === id);
+      // Extend plan for new range-based leave requests and legacy return requests.
+      if (status === 'approved' && request) {
+        const isRangeLeave = request.reason?.startsWith('[LEAVE]') && request.end_date && request.end_date !== request.start_date;
+
+        if (isRangeLeave) {
+          await extendPlanByDays(request.user_id, getLeaveDays(request.start_date, request.end_date));
+        }
 
         // rudimentary check if it's a return request
-        if (request && request.reason && request.reason.startsWith("[RETURN]")) {
+        if (request.reason && request.reason.startsWith("[RETURN]")) {
           // Find last approved leave
           const { data: lastLeave } = await supabase
             .from('leave_requests')
@@ -95,30 +151,7 @@ const AdminLeaves = () => {
             .single();
 
           if (lastLeave) {
-            const leaveDate = new Date(lastLeave.start_date);
-            const returnDate = new Date(request.start_date);
-            const diffTime = returnDate.getTime() - leaveDate.getTime();
-            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); // Round up to be generous/safe
-
-            if (diffDays > 0) {
-              // Fetch current profile
-              const { data: profile } = await supabase
-                .from('profiles')
-                .select('plan_end_date')
-                .eq('id', request.user_id)
-                .single();
-
-              if (profile?.plan_end_date) {
-                const currentEnd = new Date(profile.plan_end_date);
-                currentEnd.setDate(currentEnd.getDate() + diffDays);
-
-                await supabase.from('profiles').update({
-                  plan_end_date: currentEnd.toISOString()
-                }).eq('id', request.user_id);
-
-                toast({ title: "Plan Extended", description: `Added ${diffDays} days to student plan.` });
-              }
-            }
+            await extendPlanByDays(request.user_id, getLeaveDays(lastLeave.start_date, request.start_date));
           }
         }
       }
@@ -130,14 +163,17 @@ const AdminLeaves = () => {
       });
 
       // Notify Student of the decision
-      const request = requests.find(r => r.id === id);
       if (request) {
+        const rangeText = request.end_date && request.end_date !== request.start_date
+          ? `${formatDate(request.start_date)} - ${formatDate(request.end_date)}`
+          : formatDate(request.start_date);
+
         supabase.functions.invoke('send-notification', {
           body: {
             title: status === "approved" ? "✅ Leave Request Approved" : "❌ Leave Request Declined",
             body: status === "approved"
-              ? `Your request for ${formatDate(request.start_date)} has been approved.`
-              : `Your request for ${formatDate(request.start_date)} was not approved. Please contact admin.`,
+              ? `Your request for ${rangeText} has been approved.`
+              : `Your request for ${rangeText} was not approved. Please contact admin.`,
             userIds: [request.user_id]
           }
         });
@@ -152,7 +188,9 @@ const AdminLeaves = () => {
   };
 
   const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString('en-IN', {
+    const date = parseDateOnly(dateStr);
+    if (!date) return "";
+    return date.toLocaleDateString('en-IN', {
       day: 'numeric', month: 'short', year: 'numeric'
     });
   };
@@ -181,63 +219,70 @@ const AdminLeaves = () => {
               <p>No leave requests found</p>
             </div>
           ) : (
-            requests.map((r) => (
-              <div key={r.id} className="bg-card rounded-2xl border border-border/50 p-4 shadow-sm">
-                <div className="flex items-start justify-between mb-2">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center overflow-hidden">
-                      {r.profiles?.photo_url ? (
-                        <img src={r.profiles.photo_url} className="w-full h-full object-cover" />
-                      ) : (
-                        <User className="w-5 h-5 text-primary" />
-                      )}
-                    </div>
-                    <div>
-                      <p className="font-semibold text-sm">{r.profiles?.name || "Unknown Student"}</p>
-                      <div className="flex items-center text-xs text-muted-foreground mt-0.5">
-                        <Calendar className="w-3 h-3 mr-1" />
-                        {formatDate(r.start_date)} - {formatDate(r.end_date)}
+            requests.map((r) => {
+              const displayReason = r.reason ? r.reason.replace(/^\[.*?\]\s*/, "") : "";
+              const dateRange = r.end_date && r.end_date !== r.start_date
+                ? `${formatDate(r.start_date)} - ${formatDate(r.end_date)}`
+                : formatDate(r.start_date);
+
+              return (
+                <div key={r.id} className="bg-card rounded-2xl border border-border/50 p-4 shadow-sm">
+                  <div className="flex items-start justify-between mb-2">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center overflow-hidden">
+                        {r.profiles?.photo_url ? (
+                          <img src={r.profiles.photo_url} className="w-full h-full object-cover" />
+                        ) : (
+                          <User className="w-5 h-5 text-primary" />
+                        )}
+                      </div>
+                      <div>
+                        <p className="font-semibold text-sm">{r.profiles?.name || "Unknown Student"}</p>
+                        <div className="flex items-center text-xs text-muted-foreground mt-0.5">
+                          <Calendar className="w-3 h-3 mr-1" />
+                          {dateRange}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                  <span
-                    className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide ${r.status === "pending"
-                      ? "bg-yellow-500/10 text-yellow-600 border border-yellow-500/20"
-                      : r.status === "approved"
-                        ? "bg-green-500/10 text-green-600 border border-green-500/20"
-                        : "bg-red-500/10 text-red-600 border border-red-500/20"
-                      }`}
-                  >
-                    {r.status}
-                  </span>
-                </div>
-
-                <div className="bg-muted/50 rounded-xl p-3 mb-4 text-sm ml-12">
-                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block mb-1">Reason</span>
-                  {r.reason || "No reason provided."}
-                </div>
-
-                {r.status === "pending" && (
-                  <div className="flex gap-3 ml-12">
-                    <Button
-                      size="sm"
-                      className="flex-1 rounded-xl h-9 bg-green-600 hover:bg-green-700 text-white"
-                      onClick={() => updateStatus(r.id, "approved")}
+                    <span
+                      className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide ${r.status === "pending"
+                        ? "bg-yellow-500/10 text-yellow-600 border border-yellow-500/20"
+                        : r.status === "approved"
+                          ? "bg-green-500/10 text-green-600 border border-green-500/20"
+                          : "bg-red-500/10 text-red-600 border border-red-500/20"
+                        }`}
                     >
-                      <Check className="w-4 h-4 mr-1.5" /> Approve
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="flex-1 rounded-xl h-9 border-destructive/20 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                      onClick={() => updateStatus(r.id, "rejected")}
-                    >
-                      <X className="w-4 h-4 mr-1.5" /> Decline
-                    </Button>
+                      {r.status}
+                    </span>
                   </div>
-                )}
-              </div>
-            ))
+
+                  <div className="bg-muted/50 rounded-xl p-3 mb-4 text-sm ml-12">
+                    <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block mb-1">Reason</span>
+                    {displayReason || "No reason provided."}
+                  </div>
+
+                  {r.status === "pending" && (
+                    <div className="flex gap-3 ml-12">
+                      <Button
+                        size="sm"
+                        className="flex-1 rounded-xl h-9 bg-green-600 hover:bg-green-700 text-white"
+                        onClick={() => updateStatus(r.id, "approved")}
+                      >
+                        <Check className="w-4 h-4 mr-1.5" /> Approve
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="flex-1 rounded-xl h-9 border-destructive/20 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                        onClick={() => updateStatus(r.id, "rejected")}
+                      >
+                        <X className="w-4 h-4 mr-1.5" /> Decline
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              );
+            })
           )}
         </div>
       </PageShell>

@@ -273,7 +273,7 @@ async function resolveNotificationPayload(
 
         const { data: request, error } = await adminClient
             .from('leave_requests')
-            .select('start_date, reason, profiles:user_id(name)')
+            .select('start_date, end_date, reason, profiles:user_id(name)')
             .eq('id', requestId)
             .eq('user_id', requester.id)
             .single()
@@ -282,9 +282,12 @@ async function resolveNotificationPayload(
 
         const profile = Array.isArray(request.profiles) ? request.profiles[0] : request.profiles
         const isReturn = String(request.reason || "").startsWith("[RETURN]")
+        const dateText = request.end_date && request.end_date !== request.start_date
+            ? `${request.start_date} to ${request.end_date}`
+            : request.start_date
         return {
             title: `New ${isReturn ? "RETURN" : "LEAVE"} Request`,
-            body: `${profile?.name || "A student"} submitted a ${isReturn ? "return" : "leave"} request for ${request.start_date}.`,
+            body: `${profile?.name || "A student"} submitted a ${isReturn ? "return" : "leave"} request for ${dateText}.`,
             targetRole: 'admin',
         }
     }
