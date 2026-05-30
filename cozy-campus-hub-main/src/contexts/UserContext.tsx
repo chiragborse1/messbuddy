@@ -1,35 +1,7 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { useState, useEffect, ReactNode } from "react";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/hooks/use-toast";
-
-export interface UserData {
-    id: string;
-    name: string;
-    email: string;
-    mobile: string;
-    college: string;
-    course: string;
-    photo?: string;
-    role: "student" | "admin" | "developer";
-    status?: "active" | "pending" | "expired" | "approved" | "rejected" | "on-leave" | "suspended" | string;
-    daysRemaining?: number; // Calculated or stored
-    plan?: string;
-    onLeave?: boolean;
-    planStartDate?: string;
-    planEndDate?: string;
-    pendingAmount?: number;
-}
-
-interface UserContextType {
-    user: UserData | null;
-    loading: boolean;
-    login: (userData: UserData) => void;
-    logout: () => Promise<void>;
-    updateUser: (userData: Partial<UserData>) => Promise<void>;
-    refreshProfile: () => Promise<void>;
-}
-
-const UserContext = createContext<UserContextType | undefined>(undefined);
+import { UserContext, UserData } from "@/contexts/user";
 
 export const UserProvider = ({ children }: { children: ReactNode }) => {
     const [user, setUser] = useState<UserData | null>(null);
@@ -169,8 +141,8 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
         }
     };
 
-    const refreshProfile = async () => {
-        if (user) await fetchProfile(user.id, true);
+    const refreshProfile = async (showToast = true) => {
+        if (user) await fetchProfile(user.id, showToast);
     }
 
     return (
@@ -178,12 +150,4 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
             {children}
         </UserContext.Provider>
     );
-};
-
-export const useUser = () => {
-    const context = useContext(UserContext);
-    if (context === undefined) {
-        throw new Error("useUser must be used within a UserProvider");
-    }
-    return context;
 };

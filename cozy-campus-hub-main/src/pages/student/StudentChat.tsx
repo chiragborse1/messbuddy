@@ -3,7 +3,7 @@ import PageShell from "@/components/PageShell";
 import StudentBottomNav from "@/components/StudentBottomNav";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useUser } from "@/contexts/UserContext";
+import { useUser } from "@/hooks/useUser";
 import { supabase } from "@/lib/supabase";
 import { Send, User as UserIcon, Image as ImageIcon, X, Download, Reply, Clock } from "lucide-react";
 import { useNavigate } from "react-router-dom";

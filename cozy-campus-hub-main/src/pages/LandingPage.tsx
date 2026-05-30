@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { useEffect } from "react";
-import { useUser } from "@/contexts/UserContext";
+import { useUser } from "@/hooks/useUser";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import {

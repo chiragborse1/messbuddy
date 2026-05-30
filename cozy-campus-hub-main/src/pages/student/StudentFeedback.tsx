@@ -4,7 +4,7 @@ import PageShell from "@/components/PageShell";
 import StudentBottomNav from "@/components/StudentBottomNav";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { useUser } from "@/contexts/UserContext";
+import { useUser } from "@/hooks/useUser";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/components/ui/use-toast";
 import { Star, Send } from "lucide-react";

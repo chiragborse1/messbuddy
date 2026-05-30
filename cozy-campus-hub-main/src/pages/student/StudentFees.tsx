@@ -1,11 +1,11 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import PageShell from "@/components/PageShell";
 import StudentBottomNav from "@/components/StudentBottomNav";
 import StatusBadge from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Upload, Loader2, History, ArrowLeft, Copy, Download, X } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import { useUser } from "@/contexts/UserContext";
+import { useUser } from "@/hooks/useUser";
 import { toast } from "@/hooks/use-toast";
 import { MessReceiptTicket } from "@/components/ui/ticket-confirmation-card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -33,8 +33,19 @@ const StudentFees = () => {
   const [partialAmount, setPartialAmount] = useState("");
   const receiptRef = useRef<HTMLDivElement>(null);
 
+  const fetchPayments = useCallback(async (_silent = false) => {
+    if (!user?.id) return;
+
+    const { data } = await supabase
+      .from('payments')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false });
+    if (data) setMyPayments(data);
+  }, [user?.id]);
+
   useEffect(() => {
-    if (user) {
+    if (user?.id) {
       fetchPayments();
 
       // Realtime Listener
@@ -42,7 +53,7 @@ const StudentFees = () => {
         .channel('student_payments_changes')
         .on(
           'postgres_changes',
-          { event: '*', schema: 'public', table: 'payments' },
+          { event: '*', schema: 'public', table: 'payments', filter: `user_id=eq.${user.id}` },
           () => fetchPayments(true) // Silent update
         )
         .subscribe();
@@ -51,20 +62,7 @@ const StudentFees = () => {
         supabase.removeChannel(channel);
       };
     }
-  }, [user]);
-
-  const fetchPayments = async (silent = false) => {
-    if (!user) return;
-    // Ideally add a loading state here if you want to show a spinner on first load
-    // But since we didn't have one before, we just ensure we don't clear data unnecessarily
-
-    const { data } = await supabase
-      .from('payments')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false });
-    if (data) setMyPayments(data);
-  };
+  }, [user?.id, fetchPayments]);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;

@@ -516,8 +516,11 @@ const AdminStudents = () => {
                           <p className="font-medium text-foreground flex items-center gap-2">
                             <span>
                               {s.plan || 'No Plan'}
-                              {s.plan_end_date && (
-                                <span className="text-muted-foreground font-normal text-xs"> • Ends {formatDate(s.plan_end_date)}</span>
+                              {(s.plan_start_date || s.plan_end_date) && (
+                                <span className="text-muted-foreground font-normal text-xs">
+                                  {s.plan_start_date ? ` • Starts ${formatDate(s.plan_start_date)}` : ""}
+                                  {s.plan_end_date ? ` • Ends ${formatDate(s.plan_end_date)}` : ""}
+                                </span>
                               )}
                             </span>
                             <button

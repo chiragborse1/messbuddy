@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import PageShell from "@/components/PageShell";
 import StudentBottomNav from "@/components/StudentBottomNav";
 import { Button } from "@/components/ui/button";
@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { CalendarIcon, CalendarOff, RotateCcw, CheckCircle2, History, Loader2, ArrowLeft } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/supabase";
-import { useUser } from "@/contexts/UserContext";
+import { useUser } from "@/hooks/useUser";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { Calendar } from "@/components/ui/calendar";
@@ -28,8 +28,8 @@ const StudentLeave = () => {
   const [date, setDate] = useState<Date | undefined>(undefined);
   const [reason, setReason] = useState("");
 
-  const fetchRequests = async () => {
-    if (!user) return;
+  const fetchRequests = useCallback(async () => {
+    if (!user?.id) return;
     const { data } = await supabase
       .from('leave_requests')
       .select('*')
@@ -37,10 +37,10 @@ const StudentLeave = () => {
       .order('created_at', { ascending: false });
 
     if (data) setRequests(data);
-  };
+  }, [user?.id]);
 
   useEffect(() => {
-    if (user) {
+    if (user?.id) {
       fetchRequests();
 
       // Realtime Listener — filtered to this user only
@@ -57,7 +57,7 @@ const StudentLeave = () => {
         supabase.removeChannel(channel);
       };
     }
-  }, [user]);
+  }, [user?.id, fetchRequests]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

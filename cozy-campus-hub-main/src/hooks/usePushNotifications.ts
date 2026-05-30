@@ -2,11 +2,27 @@ import { useEffect, useCallback } from 'react';
 import { PushNotifications, Token, ActionPerformed } from '@capacitor/push-notifications';
 import { Capacitor } from '@capacitor/core';
 import { supabase } from '@/lib/supabase';
-import { useUser } from '@/contexts/UserContext';
+import { useUser } from '@/hooks/useUser';
 import { toast } from '@/hooks/use-toast';
 
 export const usePushNotifications = () => {
     const { user } = useUser();
+
+    const saveTokenToDatabase = useCallback(async (token: string) => {
+        if (!user?.id) return;
+
+        try {
+            const { error } = await supabase
+                .from('profiles')
+                .update({ fcm_token: token })
+                .eq('id', user.id);
+
+            if (error) throw error;
+            console.log('FCM Token synced to profile');
+        } catch (err) {
+            console.error('Failed to sync FCM Token:', err);
+        }
+    }, [user?.id]);
 
     const registerPush = useCallback(async () => {
         if (!Capacitor.isNativePlatform()) {
@@ -55,23 +71,7 @@ export const usePushNotifications = () => {
         } catch (error) {
             console.error('Push notification registration error:', error);
         }
-    }, [user?.id]);
-
-    const saveTokenToDatabase = async (token: string) => {
-        if (!user?.id) return;
-
-        try {
-            const { error } = await supabase
-                .from('profiles')
-                .update({ fcm_token: token })
-                .eq('id', user.id);
-
-            if (error) throw error;
-            console.log('FCM Token synced to profile');
-        } catch (err) {
-            console.error('Failed to sync FCM Token:', err);
-        }
-    };
+    }, [saveTokenToDatabase]);
 
     useEffect(() => {
         if (user?.id) {

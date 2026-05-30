@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import PageShell from "@/components/PageShell";
 import AdminBottomNav from "@/components/AdminBottomNav";
 import { Users, IndianRupee, UserPlus, Shield, Loader2, Utensils, Clock, Check, MessageCircle, Bell } from "lucide-react";
-import { useUser } from "@/contexts/UserContext";
+import { useUser } from "@/hooks/useUser";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/hooks/use-toast";

@@ -1,6 +1,6 @@
 import { Navigate } from "react-router-dom";
 import { Loader2 } from "lucide-react";
-import { useUser } from "@/contexts/UserContext";
+import { useUser } from "@/hooks/useUser";
 
 interface ProtectedRouteProps {
     children: React.ReactNode;

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import PageShell from "@/components/PageShell";
 import StudentBottomNav from "@/components/StudentBottomNav";
 import { Check, Trophy, Clock, Loader2, AlertCircle, Search } from "lucide-react";
@@ -6,7 +6,7 @@ import { toast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/lib/supabase";
-import { useUser } from "@/contexts/UserContext";
+import { useUser } from "@/hooks/useUser";
 
 const StudentMenu = () => {
   const { user } = useUser();
@@ -17,7 +17,7 @@ const StudentMenu = () => {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
 
-  const fetchMenu = async (silent = false) => {
+  const fetchMenu = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
       // 1. Fetch Menu Items & Config
@@ -43,10 +43,10 @@ const StudentMenu = () => {
     } finally {
       if (!silent) setLoading(false);
     }
-  };
+  }, []);
 
-  const fetchUserVotes = async () => {
-    if (!user) return;
+  const fetchUserVotes = useCallback(async () => {
+    if (!user?.id) return;
     try {
       const { data: userVotes, error: votesError } = await supabase
         .from('votes')
@@ -61,12 +61,12 @@ const StudentMenu = () => {
     } catch (error) {
       console.error("Error fetching user votes:", error);
     }
-  };
+  }, [user?.id]);
 
   useEffect(() => {
     fetchMenu();
     fetchUserVotes();
-  }, [user]);
+  }, [fetchMenu, fetchUserVotes]);
 
   useEffect(() => {
     // Optional: Realtime subscription for live vote counts
@@ -81,7 +81,7 @@ const StudentMenu = () => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user]);
+  }, [fetchMenu]);
 
   const handleVote = async (item: any) => {
     if (!votingOpen || !user) return;

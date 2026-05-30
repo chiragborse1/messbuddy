@@ -3,7 +3,7 @@ import PageShell from "@/components/PageShell";
 import StudentBottomNav from "@/components/StudentBottomNav";
 import StatusBadge from "@/components/StatusBadge";
 import { User, Clock, CalendarDays, Utensils, Check, ChevronRight, MessageCircle, IndianRupee } from "lucide-react";
-import { useUser } from "@/contexts/UserContext";
+import { useUser } from "@/hooks/useUser";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
 import { useQuery } from "@tanstack/react-query";

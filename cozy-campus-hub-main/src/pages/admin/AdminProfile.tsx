@@ -1,17 +1,16 @@
 import PageShell from "@/components/PageShell";
 import AdminBottomNav from "@/components/AdminBottomNav";
-import { useUser } from "@/contexts/UserContext";
+import { useUser } from "@/hooks/useUser";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
-import { User, Mail, Phone, Building2, Shield, LogOut, Loader2 } from "lucide-react";
+import { User, Mail, Phone, Building2, Shield, LogOut, Loader2, Pencil, RefreshCw } from "lucide-react";
 import { useState } from "react";
-import { supabase } from "@/lib/supabase";
-import { toast } from "@/hooks/use-toast";
+import ProfileEditDialog from "@/components/ProfileEditDialog";
+import ThemeToggle from "@/components/ThemeToggle";
 
 const AdminProfile = () => {
-    const { user, logout, updateUser, refreshProfile } = useUser();
+    const { user, logout, refreshProfile } = useUser();
     const navigate = useNavigate();
-    const [photoPreview, setPhotoPreview] = useState<string | null>(user?.photo || null);
     const [isRefreshing, setIsRefreshing] = useState(false);
 
     const handleLogout = () => {
@@ -21,10 +20,11 @@ const AdminProfile = () => {
 
     const handleRefresh = async () => {
         setIsRefreshing(true);
-        // Minimum spinner time for better UX
-        const minTime = new Promise(resolve => setTimeout(resolve, 1000));
-        await Promise.all([refreshProfile(), minTime]);
-        setIsRefreshing(false);
+        try {
+            await refreshProfile();
+        } finally {
+            setIsRefreshing(false);
+        }
     };
 
 
@@ -42,12 +42,24 @@ const AdminProfile = () => {
 
                     {/* Profile Photo */}
                     <div className="flex justify-center mb-6">
-                        <div className="w-32 h-32 rounded-3xl bg-muted flex items-center justify-center overflow-hidden border-4 border-border">
-                            {photoPreview ? (
-                                <img src={photoPreview} alt="Profile" className="w-full h-full object-cover" />
-                            ) : (
-                                <Shield className="w-16 h-16 text-muted-foreground" />
-                            )}
+                        <div className="relative">
+                            <div className="w-32 h-32 rounded-3xl bg-muted flex items-center justify-center overflow-hidden border-4 border-border">
+                                {user.photo ? (
+                                    <img src={user.photo} alt="Profile" className="w-full h-full object-cover" />
+                                ) : (
+                                    <Shield className="w-16 h-16 text-muted-foreground" />
+                                )}
+                            </div>
+                            <ProfileEditDialog fields={["name", "mobile"]}>
+                                <Button
+                                    type="button"
+                                    size="icon"
+                                    className="absolute -bottom-2 -right-2 w-10 h-10 rounded-full shadow-lg"
+                                    title="Edit profile"
+                                >
+                                    <Pencil className="w-4 h-4" />
+                                </Button>
+                            </ProfileEditDialog>
                         </div>
                     </div>
 
@@ -114,7 +126,11 @@ const AdminProfile = () => {
                         </div>
                     </div>
 
-                    {/* Fix Issue Button */}
+                    <div className="mb-4">
+                        <ThemeToggle />
+                    </div>
+
+                    {/* Refresh Profile Button */}
                     <div className="mb-4">
                         <Button
                             variant="ghost"
@@ -122,8 +138,12 @@ const AdminProfile = () => {
                             onClick={handleRefresh}
                             disabled={isRefreshing}
                         >
-                            <Loader2 className={`w-5 h-5 mr-3 ${isRefreshing ? "animate-spin" : ""}`} />
-                            {isRefreshing ? "Fixing..." : "Fix Issue / Refresh Profile"}
+                            {isRefreshing ? (
+                                <Loader2 className="w-5 h-5 mr-3 animate-spin" />
+                            ) : (
+                                <RefreshCw className="w-5 h-5 mr-3" />
+                            )}
+                            {isRefreshing ? "Refreshing..." : "Refresh Profile"}
                         </Button>
                     </div>
 

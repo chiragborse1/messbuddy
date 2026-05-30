@@ -5,6 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { UserProvider } from "@/contexts/UserContext";
+import { ThemeProvider } from "@/contexts/ThemeContext";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 import ProtectedRoute from "@/components/ProtectedRoute";
 
@@ -37,9 +38,11 @@ const queryClient = new QueryClient();
 const App = () => {
   return (
     <QueryClientProvider client={queryClient}>
-      <UserProvider>
-        <AppWithNotifications />
-      </UserProvider>
+      <ThemeProvider>
+        <UserProvider>
+          <AppWithNotifications />
+        </UserProvider>
+      </ThemeProvider>
       {import.meta.env.PROD && <SpeedInsights />}
     </QueryClientProvider>
   );
