@@ -50,6 +50,8 @@ interface DayStats {
   totalCount: number;
 }
 
+const cachedCalendarPaymentsByMonth = new Map<string, PaymentRecord[]>();
+
 const currency = new Intl.NumberFormat("en-IN");
 const compactCurrency = new Intl.NumberFormat("en-IN", {
   notation: "compact",
@@ -63,6 +65,12 @@ const formatDateKey = (date: Date) => {
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+};
+
+const formatMonthKey = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  return `${year}-${month}`;
 };
 
 const formatReadableDate = (date: Date) =>
@@ -128,14 +136,26 @@ const getStatusBadgeClass = (status: PaymentStatus | null) => {
 const AdminAnalyticsCalendar = () => {
   const navigate = useNavigate();
   const today = useMemo(() => new Date(), []);
-  const [visibleMonth, setVisibleMonth] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1));
+  const initialVisibleMonth = useMemo(() => new Date(today.getFullYear(), today.getMonth(), 1), [today]);
+  const initialMonthKey = formatMonthKey(initialVisibleMonth);
+  const [visibleMonth, setVisibleMonth] = useState(initialVisibleMonth);
   const [selectedDate, setSelectedDate] = useState(() => today);
-  const [payments, setPayments] = useState<PaymentRecord[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [payments, setPayments] = useState<PaymentRecord[]>(() => cachedCalendarPaymentsByMonth.get(initialMonthKey) ?? []);
+  const [loading, setLoading] = useState(() => !cachedCalendarPaymentsByMonth.has(initialMonthKey));
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const fetchMonthPayments = useCallback(async () => {
-    setLoading(true);
+    const monthKey = formatMonthKey(visibleMonth);
+    const cachedPayments = cachedCalendarPaymentsByMonth.get(monthKey);
+    const showInitialLoader = !cachedPayments;
+
+    if (cachedPayments) {
+      setPayments(cachedPayments);
+    } else {
+      setPayments([]);
+    }
+
+    setLoading(showInitialLoader);
     setErrorMessage(null);
 
     const { start, end } = getMonthBounds(visibleMonth);
@@ -165,9 +185,11 @@ const AdminAnalyticsCalendar = () => {
     if (error) {
       console.error("Monthly calendar payments fetch failed:", error);
       setErrorMessage(error.message);
-      setPayments([]);
+      if (!cachedPayments) setPayments([]);
     } else {
-      setPayments((data ?? []) as PaymentRecord[]);
+      const nextPayments = (data ?? []) as PaymentRecord[];
+      cachedCalendarPaymentsByMonth.set(monthKey, nextPayments);
+      setPayments(nextPayments);
     }
 
     setLoading(false);

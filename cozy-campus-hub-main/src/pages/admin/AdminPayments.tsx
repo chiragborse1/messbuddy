@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useCallback, useState, useEffect } from "react";
 import PageShell from "@/components/PageShell";
 import AdminBottomNav from "@/components/AdminBottomNav";
 import ConfirmActionDialog from "@/components/ConfirmActionDialog";
@@ -30,6 +30,9 @@ type PlanFormState = {
   sort_order: string;
 };
 
+let cachedAdminPayments: any[] | null = null;
+let cachedAdminMembershipPlans: AdminMembershipPlan[] | null = null;
+
 const emptyPlanForm: PlanFormState = {
   label: "",
   price: "",
@@ -46,20 +49,31 @@ const getPaymentPlanDefinition = (payment: any) => {
 };
 
 const AdminPayments = () => {
-  const [payments, setPayments] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [payments, setPayments] = useState<any[]>(cachedAdminPayments ?? []);
+  const [loading, setLoading] = useState(!cachedAdminPayments);
   const [activeTab, setActiveTab] = useState("pending");
   const [zoomedImage, setZoomedImage] = useState<string | null>(null);
   const [confirmAction, setConfirmAction] = useState<PaymentConfirmAction | null>(null);
   const [confirmLoading, setConfirmLoading] = useState(false);
-  const [membershipPlans, setMembershipPlans] = useState<AdminMembershipPlan[]>([]);
-  const [plansLoading, setPlansLoading] = useState(false);
+  const [membershipPlans, setMembershipPlans] = useState<AdminMembershipPlan[]>(cachedAdminMembershipPlans ?? []);
+  const [plansLoading, setPlansLoading] = useState(!cachedAdminMembershipPlans);
   const [editingPlanId, setEditingPlanId] = useState<number | null>(null);
   const [planForm, setPlanForm] = useState<PlanFormState>(emptyPlanForm);
   const [savingPlan, setSavingPlan] = useState(false);
 
-  const fetchPayments = async (isBackground = false) => {
-    if (!isBackground) setLoading(true);
+  const applyPayments = useCallback((nextPayments: any[]) => {
+    cachedAdminPayments = nextPayments;
+    setPayments(nextPayments);
+  }, []);
+
+  const applyMembershipPlans = useCallback((nextPlans: AdminMembershipPlan[]) => {
+    cachedAdminMembershipPlans = nextPlans;
+    setMembershipPlans(nextPlans);
+  }, []);
+
+  const fetchPayments = useCallback(async (isBackground = false) => {
+    const showInitialLoader = !isBackground && !cachedAdminPayments;
+    if (showInitialLoader) setLoading(true);
     try {
       const { data, error } = await supabase
         .from('payments')
@@ -89,17 +103,18 @@ const AdminPayments = () => {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setPayments(data || []);
+      applyPayments(data || []);
     } catch (error: any) {
       console.error("Fetch payments error:", error);
       if (!isBackground) toast({ title: "Failed to load payments", description: error.message, variant: "destructive" });
     } finally {
-      if (!isBackground) setLoading(false);
+      if (showInitialLoader) setLoading(false);
     }
-  };
+  }, [applyPayments]);
 
-  const fetchMembershipPlans = async (isBackground = false) => {
-    if (!isBackground) setPlansLoading(true);
+  const fetchMembershipPlans = useCallback(async (isBackground = false) => {
+    const showInitialLoader = !isBackground && !cachedAdminMembershipPlans;
+    if (showInitialLoader) setPlansLoading(true);
     try {
       const { data, error } = await supabase
         .from('membership_plans')
@@ -108,14 +123,14 @@ const AdminPayments = () => {
         .order('id', { ascending: true });
 
       if (error) throw error;
-      setMembershipPlans((data || []) as AdminMembershipPlan[]);
+      applyMembershipPlans((data || []) as AdminMembershipPlan[]);
     } catch (error: any) {
       console.error("Fetch membership plans error:", error);
       if (!isBackground) toast({ title: "Failed to load plans", description: error.message, variant: "destructive" });
     } finally {
-      if (!isBackground) setPlansLoading(false);
+      if (showInitialLoader) setPlansLoading(false);
     }
-  };
+  }, [applyMembershipPlans]);
 
   useEffect(() => {
     fetchPayments();
@@ -133,7 +148,7 @@ const AdminPayments = () => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [fetchPayments]);
 
   useEffect(() => {
     fetchMembershipPlans();
@@ -150,7 +165,7 @@ const AdminPayments = () => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [fetchMembershipPlans]);
 
   const resetPlanForm = () => {
     setEditingPlanId(null);
@@ -227,7 +242,7 @@ const AdminPayments = () => {
   const updateStatus = async (id: number, status: string) => {
     // Optimistic Update: Change local state immediately
     const previousPayments = [...payments];
-    setPayments(payments.map(p => p.id === id ? { ...p, status } : p));
+    applyPayments(payments.map(p => p.id === id ? { ...p, status } : p));
 
     try {
       const { error } = await supabase
@@ -237,7 +252,7 @@ const AdminPayments = () => {
 
       if (error) {
         // Revert if failed
-        setPayments(previousPayments);
+        applyPayments(previousPayments);
         throw error;
       }
 
@@ -278,7 +293,7 @@ const AdminPayments = () => {
       });
     } catch (error: any) {
       console.error("Update status error:", error);
-      setPayments(previousPayments); // Revert on error
+      applyPayments(previousPayments); // Revert on error
       toast({ title: "Update failed", description: error.message, variant: "destructive" });
     }
   };
@@ -289,7 +304,7 @@ const AdminPayments = () => {
     if (!payment) return;
 
     // Optimistic UI
-    setPayments(payments.map(p => p.id === paymentId ? { ...p, status: 'rejected' } : p));
+    applyPayments(payments.map(p => p.id === paymentId ? { ...p, status: 'rejected' } : p));
 
     try {
       const { data: profile } = await supabase
@@ -315,7 +330,7 @@ const AdminPayments = () => {
 
     } catch (error: any) {
       console.error("Revoke error:", error);
-      setPayments(previousPayments);
+      applyPayments(previousPayments);
       toast({ title: "Action Failed", description: error.message, variant: "destructive" });
     }
   };
@@ -324,7 +339,7 @@ const AdminPayments = () => {
     try {
       const { error } = await supabase.from('payments').delete().eq('id', paymentId);
       if (error) throw error;
-      setPayments(payments.filter(p => p.id !== paymentId));
+      applyPayments(payments.filter(p => p.id !== paymentId));
       toast({ title: "Record Deleted" });
     } catch (error: any) {
       toast({ title: "Delete Failed", description: error.message, variant: "destructive" });

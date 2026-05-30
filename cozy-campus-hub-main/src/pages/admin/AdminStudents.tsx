@@ -28,6 +28,8 @@ type StudentConfirmAction =
   | { type: "trash"; studentId: string; studentName?: string }
   | { type: "permanent"; studentId: string; studentName?: string };
 
+let cachedAdminStudents: any[] | null = null;
+
 // Helper to format date to DD/MM/YYYY (Indian Standard)
 const formatDate = (dateString: string) => {
   if (!dateString) return "N/A";
@@ -59,8 +61,8 @@ const AdminStudents = () => {
   const [searchParams] = useSearchParams();
   const initialTab = searchParams.get("tab");
   const [activeTab, setActiveTab] = useState(initialTab && tabs.includes(initialTab) ? initialTab : "All");
-  const [students, setStudents] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [students, setStudents] = useState<any[]>(cachedAdminStudents ?? []);
+  const [loading, setLoading] = useState(!cachedAdminStudents);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [confirmAction, setConfirmAction] = useState<StudentConfirmAction | null>(null);
   const [confirmLoading, setConfirmLoading] = useState(false);
@@ -72,8 +74,8 @@ const AdminStudents = () => {
   const [adjustmentBalance, setAdjustmentBalance] = useState(0);
 
   const loadStudents = async (silent = false) => {
-    // ... existing loadStudents logic ... (I am replacing too much context if I copy paste all. I will target specific lines)
-    if (!silent) setLoading(true);
+    const showInitialLoader = !silent && !cachedAdminStudents;
+    if (showInitialLoader) setLoading(true);
     try {
       const { data, error } = await supabase
         .from('profiles')
@@ -82,16 +84,15 @@ const AdminStudents = () => {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setStudents(data || []);
+      cachedAdminStudents = data || [];
+      setStudents(cachedAdminStudents);
     } catch (error: any) {
       console.error(error);
       if (!silent) toast({ title: "Error loading students", description: error.message, variant: "destructive" });
     } finally {
-      if (!silent) setLoading(false);
+      if (showInitialLoader) setLoading(false);
     }
   };
-
-  // ... useEffect ...
 
   // New Handler for Drawer
   const handleOpenAdjustment = (student: any) => {

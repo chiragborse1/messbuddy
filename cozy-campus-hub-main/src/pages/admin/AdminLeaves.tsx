@@ -7,13 +7,16 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/supabase";
 
+let cachedAdminLeaveRequests: any[] | null = null;
+
 const AdminLeaves = () => {
   const navigate = useNavigate();
-  const [requests, setRequests] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [requests, setRequests] = useState<any[]>(cachedAdminLeaveRequests ?? []);
+  const [loading, setLoading] = useState(!cachedAdminLeaveRequests);
 
   const fetchRequests = async (silent = false) => {
-    if (!silent) setLoading(true);
+    const showInitialLoader = !silent && !cachedAdminLeaveRequests;
+    if (showInitialLoader) setLoading(true);
     try {
       const { data, error } = await supabase
         .from('leave_requests')
@@ -28,12 +31,13 @@ const AdminLeaves = () => {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setRequests(data || []);
+      cachedAdminLeaveRequests = data || [];
+      setRequests(cachedAdminLeaveRequests);
     } catch (error: any) {
       console.error("Error fetching leaves:", error);
       if (!silent) toast({ title: "Error", description: error.message, variant: "destructive" });
     } finally {
-      if (!silent) setLoading(false);
+      if (showInitialLoader) setLoading(false);
     }
   };
 

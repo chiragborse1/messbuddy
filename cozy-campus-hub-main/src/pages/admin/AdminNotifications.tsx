@@ -34,6 +34,8 @@ interface NotificationLog {
     created_at: string;
 }
 
+let cachedNotificationHistory: NotificationLog[] | null = null;
+
 const getFunctionErrorMessage = async (error: any) => {
     if (!error) return "Unknown error occurred";
 
@@ -67,11 +69,12 @@ const AdminNotifications = () => {
     const [uploading, setUploading] = useState(false);
     const [loading, setLoading] = useState(false);
     const [activeTab, setActiveTab] = useState<"send" | "history">("send");
-    const [historyItems, setHistoryItems] = useState<NotificationLog[]>([]);
+    const [historyItems, setHistoryItems] = useState<NotificationLog[]>(cachedNotificationHistory ?? []);
     const [historyLoading, setHistoryLoading] = useState(false);
 
     const fetchHistory = useCallback(async (silent = false) => {
-        if (!silent) setHistoryLoading(true);
+        const showInitialLoader = !silent && !cachedNotificationHistory;
+        if (showInitialLoader) setHistoryLoading(true);
         try {
             const { data, error } = await supabase
                 .from('notification_logs')
@@ -80,13 +83,14 @@ const AdminNotifications = () => {
                 .limit(50);
 
             if (error) throw error;
-            setHistoryItems((data || []) as NotificationLog[]);
+            cachedNotificationHistory = (data || []) as NotificationLog[];
+            setHistoryItems(cachedNotificationHistory);
         } catch (error: any) {
             if (!silent) {
                 toast({ title: "Failed to load history", description: error.message, variant: "destructive" });
             }
         } finally {
-            if (!silent) setHistoryLoading(false);
+            if (showInitialLoader) setHistoryLoading(false);
         }
     }, []);
 

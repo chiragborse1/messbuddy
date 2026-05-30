@@ -8,17 +8,26 @@ import { Input } from "@/components/ui/input";
 import { supabase } from "@/lib/supabase";
 import { useUser } from "@/hooks/useUser";
 
+type StudentMenuCache = {
+  lunchItems: any[];
+  dinnerItems: any[];
+  votingOpen: boolean;
+};
+
+let cachedStudentMenuData: StudentMenuCache | null = null;
+
 const StudentMenu = () => {
   const { user } = useUser();
-  const [lunchItems, setLunchItems] = useState<any[]>([]);
-  const [dinnerItems, setDinnerItems] = useState<any[]>([]);
-  const [votingOpen, setVotingOpen] = useState(false);
+  const [lunchItems, setLunchItems] = useState<any[]>(cachedStudentMenuData?.lunchItems ?? []);
+  const [dinnerItems, setDinnerItems] = useState<any[]>(cachedStudentMenuData?.dinnerItems ?? []);
+  const [votingOpen, setVotingOpen] = useState(cachedStudentMenuData?.votingOpen ?? false);
   const [votedItems, setVotedItems] = useState<number[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!cachedStudentMenuData);
   const [searchTerm, setSearchTerm] = useState("");
 
   const fetchMenu = useCallback(async (silent = false) => {
-    if (!silent) setLoading(true);
+    const showInitialLoader = !silent && !cachedStudentMenuData;
+    if (showInitialLoader) setLoading(true);
     try {
       // 1. Fetch Menu Items & Config
       const { data: menuData, error: menuError } = await supabase
@@ -32,16 +41,22 @@ const StudentMenu = () => {
         const lunch = menuData.filter((i: any) => i.category === 'lunch');
         const dinner = menuData.filter((i: any) => i.category === 'dinner');
         const config = menuData.find((i: any) => i.category === 'config' && i.name === 'voting_status');
+        const nextData = {
+          lunchItems: lunch,
+          dinnerItems: dinner,
+          votingOpen: config ? config.votes === 1 : false,
+        };
 
-        setLunchItems(lunch);
-        setDinnerItems(dinner);
-        setVotingOpen(config ? config.votes === 1 : false);
+        cachedStudentMenuData = nextData;
+        setLunchItems(nextData.lunchItems);
+        setDinnerItems(nextData.dinnerItems);
+        setVotingOpen(nextData.votingOpen);
       }
     } catch (error: any) {
       console.error("Error fetching menu:", error);
       if (!silent) toast({ title: "Failed to load menu", description: error.message, variant: "destructive" });
     } finally {
-      if (!silent) setLoading(false);
+      if (showInitialLoader) setLoading(false);
     }
   }, []);
 

@@ -8,13 +8,22 @@ import { Plus, Trash2, Send, Lock, RotateCcw, Loader2, ChevronDown, ChevronUp, U
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/supabase";
 
+type AdminMenuCache = {
+  lunchItems: any[];
+  dinnerItems: any[];
+  votingOpen: boolean;
+  isAutoNotify: boolean;
+};
+
+let cachedAdminMenuData: AdminMenuCache | null = null;
+
 const AdminMenu = () => {
-  const [lunchItems, setLunchItems] = useState<any[]>([]);
-  const [dinnerItems, setDinnerItems] = useState<any[]>([]);
-  const [votingOpen, setVotingOpen] = useState(false);
-  const [isAutoNotify, setIsAutoNotify] = useState(false);
+  const [lunchItems, setLunchItems] = useState<any[]>(cachedAdminMenuData?.lunchItems ?? []);
+  const [dinnerItems, setDinnerItems] = useState<any[]>(cachedAdminMenuData?.dinnerItems ?? []);
+  const [votingOpen, setVotingOpen] = useState(cachedAdminMenuData?.votingOpen ?? false);
+  const [isAutoNotify, setIsAutoNotify] = useState(cachedAdminMenuData?.isAutoNotify ?? false);
   const [sendingNotification, setSendingNotification] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!cachedAdminMenuData);
 
   const [newLunch, setNewLunch] = useState("");
   const [newDinner, setNewDinner] = useState("");
@@ -30,24 +39,40 @@ const AdminMenu = () => {
   }, [expandedItemId]);
 
   const fetchMenu = async (silent = false) => {
-    if (!silent) setLoading(true);
-    const { data, error } = await supabase
-      .from('menu_items')
-      .select('id, name, category, votes, image_url')
-      .order('id', { ascending: true });
+    const showInitialLoader = !silent && !cachedAdminMenuData;
+    if (showInitialLoader) setLoading(true);
 
-    if (data) {
+    try {
+      const { data, error } = await supabase
+        .from('menu_items')
+        .select('id, name, category, votes, image_url')
+        .order('id', { ascending: true });
+
+      if (error) throw error;
+      if (!data) return;
+
       const lunch = data.filter((i: any) => i.category === 'lunch');
       const dinner = data.filter((i: any) => i.category === 'dinner');
       const configVote = data.find((i: any) => i.category === 'config' && i.name === 'voting_status');
       const configNotify = data.find((i: any) => i.category === 'config' && i.name === 'auto_notification');
+      const nextData = {
+        lunchItems: lunch,
+        dinnerItems: dinner,
+        votingOpen: configVote ? configVote.votes === 1 : false,
+        isAutoNotify: configNotify ? configNotify.votes === 1 : false,
+      };
 
-      setLunchItems(lunch);
-      setDinnerItems(dinner);
-      setVotingOpen(configVote ? configVote.votes === 1 : false);
-      setIsAutoNotify(configNotify ? configNotify.votes === 1 : false);
+      cachedAdminMenuData = nextData;
+      setLunchItems(nextData.lunchItems);
+      setDinnerItems(nextData.dinnerItems);
+      setVotingOpen(nextData.votingOpen);
+      setIsAutoNotify(nextData.isAutoNotify);
+    } catch (error: any) {
+      console.error("Error fetching menu:", error);
+      if (!silent) toast({ title: "Failed to load menu", description: error.message, variant: "destructive" });
+    } finally {
+      if (showInitialLoader) setLoading(false);
     }
-    if (!silent) setLoading(false);
   };
 
   useEffect(() => {
@@ -201,6 +226,9 @@ const AdminMenu = () => {
       if (error) throw error;
 
       setVotingOpen(open);
+      if (cachedAdminMenuData) {
+        cachedAdminMenuData = { ...cachedAdminMenuData, votingOpen: open };
+      }
       toast({
         title: open ? "Voting Opened" : "Voting Closed",
         description: open ? "Students can now vote." : "Voting ended.",
@@ -277,6 +305,9 @@ const AdminMenu = () => {
         await supabase.from('menu_items').insert({ category: 'config', name: 'auto_notification', votes: enabled ? 1 : 0 });
       }
       setIsAutoNotify(enabled);
+      if (cachedAdminMenuData) {
+        cachedAdminMenuData = { ...cachedAdminMenuData, isAutoNotify: enabled };
+      }
       toast({ title: enabled ? "Auto-Notifications Enabled" : "Auto-Notifications Disabled" });
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
