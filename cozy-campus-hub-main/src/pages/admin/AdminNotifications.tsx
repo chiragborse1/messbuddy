@@ -18,6 +18,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/hooks/use-toast";
 import { validateImageFile } from "@/lib/uploads";
+import { fetchFeaturedMenuItems } from "@/lib/menuQueries";
 
 interface NotificationLog {
     id: string;
@@ -190,19 +191,14 @@ const AdminNotifications = () => {
         // Auto-fetch menu for meal ready notifications
         if (type === "meal") {
             try {
-                const { data: menuItems } = await supabase
-                    .from('menu_items')
-                    .select('name, image_url')
-                    .neq('category', 'config')
-                    .order('votes', { ascending: false })
-                    .limit(3);
+                const menuItems = await fetchFeaturedMenuItems(undefined, 3);
 
-                if (menuItems && menuItems.length > 0) {
-                    const menuText = menuItems.map(i => i.name).join(", ");
+                if (menuItems.length > 0) {
+                    const menuText = menuItems.map(i => i.item.name).join(", ");
                     finalBody = `Today's Special: ${menuText}. Come and get it!`;
                     // Use the first item's image as the notification thumbnail
-                    if (menuItems[0].image_url) {
-                        finalImage = menuItems[0].image_url;
+                    if (menuItems[0].item.image_url) {
+                        finalImage = menuItems[0].item.image_url;
                     }
                 }
             } catch (e) {

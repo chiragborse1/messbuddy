@@ -1,217 +1,288 @@
-import { useState, useEffect, useCallback } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import PageShell from "@/components/PageShell";
 import StudentBottomNav from "@/components/StudentBottomNav";
-import { Check, Trophy, Clock, Loader2, AlertCircle, Search } from "lucide-react";
+import { Check, Clock, Image as ImageIcon, Loader2, Search, Trophy, Utensils } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/lib/supabase";
 import { useUser } from "@/hooks/useUser";
+import {
+  formatMenuDate,
+  getMealTitle,
+  getSessionStatusLabel,
+  getTodayDateInputValue,
+  getWinningSessionItemIds,
+  mapMenuSessionItems,
+  MealType,
+  MenuSession,
+  MenuSessionItem,
+  MenuSessionItemRow,
+  splitMenuItemsByMeal,
+} from "@/lib/menu";
 
 type StudentMenuCache = {
-  lunchItems: any[];
-  dinnerItems: any[];
-  votingOpen: boolean;
+  userId: string | null;
+  session: MenuSession | null;
+  sessionItems: MenuSessionItem[];
 };
+
+const sessionSelect = "id, service_date, title, status, voting_closes_at, created_at, updated_at";
+const itemSelect = "id, session_id, menu_item_id, meal_type, position, menu_items(id, name, category, image_url)";
 
 let cachedStudentMenuData: StudentMenuCache | null = null;
 
 const StudentMenu = () => {
   const { user } = useUser();
-  const [lunchItems, setLunchItems] = useState<any[]>(cachedStudentMenuData?.lunchItems ?? []);
-  const [dinnerItems, setDinnerItems] = useState<any[]>(cachedStudentMenuData?.dinnerItems ?? []);
-  const [votingOpen, setVotingOpen] = useState(cachedStudentMenuData?.votingOpen ?? false);
-  const [votedItems, setVotedItems] = useState<number[]>([]);
-  const [loading, setLoading] = useState(!cachedStudentMenuData);
+  const cachedForUser = cachedStudentMenuData?.userId === (user?.id ?? null) ? cachedStudentMenuData : null;
+  const [session, setSession] = useState<MenuSession | null>(cachedForUser?.session ?? null);
+  const [sessionItems, setSessionItems] = useState<MenuSessionItem[]>(cachedForUser?.sessionItems ?? []);
+  const [loading, setLoading] = useState(!cachedForUser);
+  const [votingItemId, setVotingItemId] = useState<number | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
 
+  const groupedItems = useMemo(() => splitMenuItemsByMeal(sessionItems), [sessionItems]);
+  const votingOpen = session?.status === "voting_open";
+
+  const applyMenuData = useCallback((nextSession: MenuSession | null, nextItems: MenuSessionItem[]) => {
+    cachedStudentMenuData = {
+      userId: user?.id ?? null,
+      session: nextSession,
+      sessionItems: nextItems,
+    };
+    setSession(nextSession);
+    setSessionItems(nextItems);
+  }, [user?.id]);
+
+  const loadSessionItems = useCallback(async (sessionId: number) => {
+    const { data, error } = await supabase
+      .from("menu_session_items")
+      .select(itemSelect)
+      .eq("session_id", sessionId)
+      .order("meal_type", { ascending: true })
+      .order("position", { ascending: true })
+      .order("id", { ascending: true });
+
+    if (error) throw error;
+
+    const rows = (data || []) as MenuSessionItemRow[];
+    if (rows.length === 0) return [];
+
+    const itemIds = rows.map((row) => row.id);
+    const [statsResult, votesResult] = await Promise.all([
+      supabase
+        .from("menu_session_item_stats")
+        .select("session_item_id, vote_count")
+        .eq("session_id", sessionId)
+        .in("session_item_id", itemIds),
+      user?.id
+        ? supabase
+          .from("menu_votes")
+          .select("session_item_id")
+          .eq("session_id", sessionId)
+          .eq("user_id", user.id)
+        : Promise.resolve({ data: [], error: null }),
+    ]);
+
+    if (statsResult.error) throw statsResult.error;
+    if (votesResult.error) throw votesResult.error;
+
+    const voteCounts = new Map((statsResult.data || []).map((stat: any) => [Number(stat.session_item_id), Number(stat.vote_count) || 0]));
+    const votedIds = new Set((votesResult.data || []).map((vote: any) => Number(vote.session_item_id)));
+    return mapMenuSessionItems(rows, voteCounts, votedIds);
+  }, [user?.id]);
+
   const fetchMenu = useCallback(async (silent = false) => {
-    const showInitialLoader = !silent && !cachedStudentMenuData;
+    const hasCurrentUserCache = cachedStudentMenuData?.userId === (user?.id ?? null);
+    const showInitialLoader = !silent && !hasCurrentUserCache;
     if (showInitialLoader) setLoading(true);
+
     try {
-      // 1. Fetch Menu Items & Config
-      const { data: menuData, error: menuError } = await supabase
-        .from('menu_items')
-        .select('id, name, category, votes, image_url')
-        .order('id', { ascending: true });
+      const { data: sessions, error } = await supabase
+        .from("menu_sessions")
+        .select(sessionSelect)
+        .gte("service_date", getTodayDateInputValue())
+        .order("service_date", { ascending: true })
+        .limit(1);
 
-      if (menuError) throw menuError;
+      if (error) throw error;
 
-      if (menuData) {
-        const lunch = menuData.filter((i: any) => i.category === 'lunch');
-        const dinner = menuData.filter((i: any) => i.category === 'dinner');
-        const config = menuData.find((i: any) => i.category === 'config' && i.name === 'voting_status');
-        const nextData = {
-          lunchItems: lunch,
-          dinnerItems: dinner,
-          votingOpen: config ? config.votes === 1 : false,
-        };
-
-        cachedStudentMenuData = nextData;
-        setLunchItems(nextData.lunchItems);
-        setDinnerItems(nextData.dinnerItems);
-        setVotingOpen(nextData.votingOpen);
-      }
+      const nextSession = (sessions?.[0] ?? null) as MenuSession | null;
+      const nextItems = nextSession ? await loadSessionItems(nextSession.id) : [];
+      applyMenuData(nextSession, nextItems);
     } catch (error: any) {
       console.error("Error fetching menu:", error);
       if (!silent) toast({ title: "Failed to load menu", description: error.message, variant: "destructive" });
     } finally {
       if (showInitialLoader) setLoading(false);
     }
-  }, []);
-
-  const fetchUserVotes = useCallback(async () => {
-    if (!user?.id) return;
-    try {
-      const { data: userVotes, error: votesError } = await supabase
-        .from('votes')
-        .select('menu_item_id')
-        .eq('user_id', user.id);
-
-      if (votesError) {
-        console.error("Error fetching votes:", votesError);
-      } else if (userVotes) {
-        setVotedItems(userVotes.map((v: any) => v.menu_item_id));
-      }
-    } catch (error) {
-      console.error("Error fetching user votes:", error);
-    }
-  }, [user?.id]);
+  }, [applyMenuData, loadSessionItems, user?.id]);
 
   useEffect(() => {
-    fetchMenu();
-    fetchUserVotes();
-  }, [fetchMenu, fetchUserVotes]);
+    void fetchMenu();
 
-  useEffect(() => {
-    // Optional: Realtime subscription for live vote counts
     const channel = supabase
-      .channel('public:menu_items')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'menu_items' }, () => {
-        fetchMenu(true); // Silent update ONLY for menu counts
-      })
+      .channel(`student_menu_sessions_${user?.id || "anonymous"}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "menu_sessions" }, () => fetchMenu(true))
+      .on("postgres_changes", { event: "*", schema: "public", table: "menu_session_items" }, () => fetchMenu(true))
+      .on("postgres_changes", { event: "*", schema: "public", table: "menu_votes" }, () => fetchMenu(true))
+      .on("postgres_changes", { event: "*", schema: "public", table: "menu_items" }, () => fetchMenu(true))
       .subscribe();
 
-    // Cleanup function
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [fetchMenu]);
+  }, [fetchMenu, user?.id]);
 
-  const handleVote = async (item: any) => {
+  const handleVote = async (item: MenuSessionItem) => {
     if (!votingOpen || !user) return;
+    if (item.votedByMe) return;
 
-    // Prevent clicking the same item if already voted
-    if (votedItems.includes(item.id)) return;
-
+    setVotingItemId(item.id);
     try {
-      const { error: voteError } = await supabase.rpc('vote_for_item', {
-        item_id: item.id,
-        category_name: item.category,
+      const { error } = await supabase.rpc("vote_for_menu_session_item", {
+        p_session_item_id: item.id,
       });
 
-      if (voteError) throw voteError;
-
-      toast({
-        title: "Vote Recorded!",
-        description: `You voted for ${item.name}`,
-      });
-
-      // 5. Force Refresh of Full State
-      await Promise.all([
-        fetchMenu(true),
-        fetchUserVotes()
-      ]);
-
+      if (error) throw error;
+      toast({ title: "Vote recorded", description: `You voted for ${item.item.name}.` });
+      await fetchMenu(true);
     } catch (error: any) {
-      console.error("Voting error:", error);
-      toast({
-        title: "Vote Failed",
-        description: error.message || "Could not place vote.",
-        variant: 'destructive',
-      });
-      // Refresh to ensure we aren't showing bad state
-      fetchMenu(true);
-      fetchUserVotes();
+      toast({ title: "Vote failed", description: error.message || "Could not place vote.", variant: "destructive" });
+      await fetchMenu(true);
+    } finally {
+      setVotingItemId(null);
     }
   };
 
-  const renderMealSection = (title: string, items: any[], type: "lunch" | "dinner") => {
-    const totalVotes = items.reduce((a, b) => a + b.votes, 0) || 1;
-    const maxVotes = Math.max(...items.map(i => i.votes));
-    const winners = items.filter(i => i.votes === maxVotes && maxVotes > 0);
+  const getStatusPanel = () => {
+    if (!session) {
+      return {
+        icon: <Utensils className="w-5 h-5 text-muted-foreground" />,
+        title: "No menu prepared yet",
+        body: "The admin has not created the next menu session.",
+        className: "bg-muted/40 border-border text-muted-foreground",
+      };
+    }
 
-    // Check if user has voted for ANY item in this category
-    // We find if any item in this list is in the 'votedItems' array
-    const hasVotedInCategory = items.some(i => votedItems.includes(i.id));
+    if (session.status === "voting_open") {
+      return {
+        icon: <Clock className="w-5 h-5 text-primary" />,
+        title: "Voting is open",
+        body: `Choose one lunch and one dinner item for ${formatMenuDate(session.service_date)}.`,
+        className: "bg-primary/5 border-primary/10 text-primary",
+      };
+    }
+
+    if (session.status === "draft") {
+      return {
+        icon: <Utensils className="w-5 h-5 text-muted-foreground" />,
+        title: "Menu is being prepared",
+        body: `Voting for ${formatMenuDate(session.service_date)} is not open yet.`,
+        className: "bg-muted/40 border-border text-muted-foreground",
+      };
+    }
+
+    return {
+      icon: <Trophy className="w-5 h-5 text-amber-600" />,
+      title: getSessionStatusLabel(session.status),
+      body: `Results for ${formatMenuDate(session.service_date)} are shown below.`,
+      className: "bg-amber-50 border-amber-100 text-amber-800 dark:bg-amber-950/30 dark:border-amber-900 dark:text-amber-300",
+    };
+  };
+
+  const renderMealSection = (mealType: MealType, allItems: MenuSessionItem[]) => {
+    const filteredItems = allItems.filter((item) =>
+      item.item.name.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+    const winnerIds = getWinningSessionItemIds(allItems);
+    const totalVotes = Math.max(1, allItems.reduce((sum, item) => sum + item.voteCount, 0));
+    const myVote = allItems.find((item) => item.votedByMe);
 
     return (
-      <div className="mb-8">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-bold flex items-center gap-2">
-            {title}
-            {!votingOpen && winners.length > 0 && (
-              <span className="bg-yellow-100 text-yellow-700 text-[10px] px-2 py-0.5 rounded-full uppercase tracking-wider font-bold border border-yellow-200">
-                Winner Decided
-              </span>
-            )}
-          </h2>
+      <section className="mb-8">
+        <div className="flex items-center justify-between mb-4 gap-3">
+          <div>
+            <h2 className="text-lg font-bold">{getMealTitle(mealType)}</h2>
+            {myVote && <p className="text-xs text-muted-foreground mt-0.5">Your vote: {myVote.item.name}</p>}
+          </div>
+          {!votingOpen && winnerIds.size > 0 && (
+            <span className="bg-amber-100 text-amber-700 text-[10px] px-2 py-0.5 rounded-full uppercase tracking-wider font-bold border border-amber-200 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-900">
+              Winner
+            </span>
+          )}
         </div>
 
         <div className="space-y-3">
-          {items.length === 0 ? (
-            <p className="text-muted-foreground text-sm italic">No items available.</p>
+          {filteredItems.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-border p-4 text-sm text-muted-foreground">
+              {allItems.length === 0 ? `No ${mealType} items available.` : "No items match your search."}
+            </div>
           ) : (
-            items.map((item) => {
-              const isVotedByMe = votedItems.includes(item.id);
-              const isWinner = !votingOpen && winners.some(w => w.id === item.id);
-              const percentage = Math.round((item.votes / totalVotes) * 100);
+            filteredItems.map((item) => {
+              const isWinner = !votingOpen && winnerIds.has(item.id);
+              const percentage = Math.round((item.voteCount / totalVotes) * 100);
+              const disabled = !votingOpen || votingItemId !== null;
 
               return (
                 <button
                   key={item.id}
+                  type="button"
                   onClick={() => handleVote(item)}
-                  // Allow switching: Only disable if voting is strictly CLOSED
-                  disabled={!votingOpen}
-                  className={`w-full relative overflow-hidden rounded-2xl border transition-all text-left group ${isWinner
-                    ? "bg-yellow-50/50 border-yellow-200 ring-2 ring-yellow-400/20 shadow-sm"
-                    : isVotedByMe
+                  disabled={disabled}
+                  className={`w-full relative overflow-hidden rounded-2xl border transition-all text-left group p-4 disabled:cursor-not-allowed ${isWinner
+                    ? "bg-amber-50/70 border-amber-200 ring-2 ring-amber-400/20 shadow-sm dark:bg-amber-950/20 dark:border-amber-900"
+                    : item.votedByMe
                       ? "bg-primary/5 border-primary ring-1 ring-primary/20"
                       : "bg-card border-border/50 hover:border-primary/30"
-                    } p-4 disabled:opacity-70 disabled:cursor-not-allowed`}
-                >    <div className="flex items-center gap-4 relative z-10">
+                    } ${disabled && !item.votedByMe ? "disabled:opacity-70" : ""}`}
+                >
+                  <div className="flex items-center gap-4 relative z-10">
+                    <div className="w-12 h-12 rounded-xl bg-muted overflow-hidden flex items-center justify-center shrink-0">
+                      {item.item.image_url ? (
+                        <img src={item.item.image_url} alt={item.item.name} className="w-full h-full object-cover" />
+                      ) : (
+                        <ImageIcon className="w-5 h-5 text-muted-foreground" />
+                      )}
+                    </div>
+
                     <div
                       className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors flex-shrink-0 ${isWinner
-                        ? "bg-yellow-100 text-yellow-600"
-                        : isVotedByMe
+                        ? "bg-amber-100 text-amber-600 dark:bg-amber-950 dark:text-amber-300"
+                        : item.votedByMe
                           ? "bg-primary text-primary-foreground"
                           : "bg-muted text-muted-foreground"
                         }`}
                     >
-                      {isWinner ? <Trophy className="w-5 h-5" /> : isVotedByMe ? <Check className="w-5 h-5" /> : <span className="text-xs font-semibold">{percentage}%</span>}
+                      {votingItemId === item.id ? (
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                      ) : isWinner ? (
+                        <Trophy className="w-5 h-5" />
+                      ) : item.votedByMe ? (
+                        <Check className="w-5 h-5" />
+                      ) : (
+                        <span className="text-xs font-semibold">{percentage}%</span>
+                      )}
                     </div>
 
                     <div className="flex-1 min-w-0">
-                      <div className="flex justify-between items-center mb-1">
-                        <span className={`font-semibold truncate ${isWinner ? "text-yellow-700" : ""}`}>
-                          {item.name}
+                      <div className="flex justify-between items-center gap-2 mb-1">
+                        <span className={`font-semibold truncate ${isWinner ? "text-amber-700 dark:text-amber-300" : ""}`}>
+                          {item.item.name}
                         </span>
-                        {isVotedByMe && <span className="text-[10px] font-medium text-primary bg-primary/10 px-1.5 py-0.5 rounded">Voted</span>}
+                        {item.votedByMe && <span className="text-[10px] font-medium text-primary bg-primary/10 px-1.5 py-0.5 rounded">Voted</span>}
                       </div>
 
-                      {/* Progress Bar */}
                       <div className="w-full h-2 bg-muted/50 rounded-full overflow-hidden">
                         <div
-                          className={`h-full rounded-full transition-all duration-500 ${isWinner ? "bg-yellow-400" : isVotedByMe ? "bg-primary" : "bg-muted-foreground/30"
-                            }`}
+                          className={`h-full rounded-full transition-all duration-500 ${isWinner ? "bg-amber-400" : item.votedByMe ? "bg-primary" : "bg-muted-foreground/30"}`}
                           style={{ width: `${percentage}%` }}
                         />
                       </div>
                     </div>
 
                     <div className="text-right flex-shrink-0 min-w-[3rem]">
-                      <span className={`text-lg font-bold block leading-none ${isWinner ? "text-yellow-700" : ""}`}>
-                        {item.votes}
+                      <span className={`text-lg font-bold block leading-none ${isWinner ? "text-amber-700 dark:text-amber-300" : ""}`}>
+                        {item.voteCount}
                       </span>
                       <span className="text-[10px] text-muted-foreground font-medium uppercase">votes</span>
                     </div>
@@ -221,16 +292,9 @@ const StudentMenu = () => {
             })
           )}
         </div>
-      </div>
+      </section>
     );
   };
-
-  const filteredLunch = lunchItems.filter((item) =>
-    item.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-  const filteredDinner = dinnerItems.filter((item) =>
-    item.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
 
   if (loading) {
     return (
@@ -243,32 +307,23 @@ const StudentMenu = () => {
     );
   }
 
+  const statusPanel = getStatusPanel();
+
   return (
     <>
       <PageShell
-        title={votingOpen ? "Vote for Menu" : "Menu Decided"}
-        subtitle={votingOpen ? "Tap to cast your vote 🗳️" : "The results are in! 🏆"}
+        title={votingOpen ? "Vote for Menu" : "Menu"}
+        subtitle={session ? `${formatMenuDate(session.service_date)} · ${getSessionStatusLabel(session.status)}` : "Waiting for menu"}
       >
-        {!votingOpen ? (
-          <div className="bg-gradient-to-br from-yellow-50 to-orange-50 rounded-2xl p-5 mb-6 border border-yellow-100 shadow-sm">
-            <div className="flex gap-4">
-              <div className="w-10 h-10 rounded-full bg-yellow-100 flex items-center justify-center flex-shrink-0">
-                <Trophy className="w-5 h-5 text-yellow-600" />
-              </div>
-              <div>
-                <h3 className="font-bold text-yellow-900 mb-1">Voting is Closed</h3>
-                <p className="text-sm text-yellow-700/80 leading-relaxed">
-                  The menu has been finalized based on majority votes. Check out the winners below!
-                </p>
-              </div>
-            </div>
+        <div className={`rounded-2xl p-4 mb-6 border flex gap-3 ${statusPanel.className}`}>
+          <div className="w-10 h-10 rounded-full bg-background/70 flex items-center justify-center flex-shrink-0">
+            {statusPanel.icon}
           </div>
-        ) : (
-          <div className="bg-primary/5 rounded-2xl p-4 mb-6 border border-primary/10 flex items-center gap-3">
-            <Clock className="w-5 h-5 text-primary" />
-            <p className="text-sm font-medium text-primary">Voting closes at midnight. Cast your vote now!</p>
+          <div>
+            <h3 className="font-bold mb-1">{statusPanel.title}</h3>
+            <p className="text-sm opacity-80 leading-relaxed">{statusPanel.body}</p>
           </div>
-        )}
+        </div>
 
         <div className="relative mb-6">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -276,13 +331,13 @@ const StudentMenu = () => {
             placeholder="Search menu items..."
             className="pl-9 h-12 rounded-xl bg-card border-border/50"
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={(event) => setSearchTerm(event.target.value)}
           />
         </div>
 
         <div className="pb-20">
-          {renderMealSection("🍛 Lunch", filteredLunch, "lunch")}
-          {renderMealSection("🍽️ Dinner", filteredDinner, "dinner")}
+          {renderMealSection("lunch", groupedItems.lunch)}
+          {renderMealSection("dinner", groupedItems.dinner)}
         </div>
       </PageShell>
       <StudentBottomNav />

@@ -6,6 +6,7 @@ import { useUser } from "@/hooks/useUser";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/hooks/use-toast";
+import { fetchFeaturedMenuItems, fetchNearestMenuSession } from "@/lib/menuQueries";
 
 const defaultStats = {
   totalStudents: 0,
@@ -116,12 +117,28 @@ const AdminDashboard = () => {
         ]);
 
         const revenue = paymentsResult.data?.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0) || 0;
+        let activeMenuItemCount = menuCountResult.count || 0;
+
+        try {
+          const nearestMenuSession = await fetchNearestMenuSession();
+          if (nearestMenuSession) {
+            const { count, error } = await supabase
+              .from('menu_session_items')
+              .select('id', { count: 'exact', head: true })
+              .eq('session_id', nearestMenuSession.id);
+
+            if (!error) activeMenuItemCount = count || 0;
+          }
+        } catch (menuCountError) {
+          console.error("Menu session count failed:", menuCountError);
+        }
+
         const nextData: DashboardData = {
           stats: {
             totalStudents: totalResult.count || 0,
             activeStudents: activeResult.count || 0,
             pendingRequests: pendingResult.count || 0,
-            menuItems: menuCountResult.count || 0,
+            menuItems: activeMenuItemCount,
             leaveRequests: leaveCountResult.count || 0,
             totalRevenue: revenue
           },
@@ -262,20 +279,15 @@ const AdminDashboard = () => {
         // Fetch current menu for a rich notification
         const fetchAndNotify = async () => {
           try {
-            const { data: menuItems } = await supabase
-              .from('menu_items')
-              .select('name, image_url')
-              .neq('category', 'config')
-              .order('votes', { ascending: false })
-              .limit(3);
+            const menuItems = await fetchFeaturedMenuItems(undefined, 3);
 
             let body = "The food is served and hot. Enjoy your meal!";
             let image = "";
 
-            if (menuItems && menuItems.length > 0) {
-              const menuNames = menuItems.map(i => i.name).join(", ");
+            if (menuItems.length > 0) {
+              const menuNames = menuItems.map(i => i.item.name).join(", ");
               body = `Today's Special: ${menuNames}. Come and get it!`;
-              if (menuItems[0].image_url) image = menuItems[0].image_url;
+              if (menuItems[0].item.image_url) image = menuItems[0].item.image_url;
             }
 
             supabase.functions.invoke('send-notification', {
