@@ -3,8 +3,9 @@ import { useCallback, useState, useEffect } from "react";
 import PageShell from "@/components/PageShell";
 import AdminBottomNav from "@/components/AdminBottomNav";
 import { supabase } from "@/lib/supabase";
-import { IndianRupee, Calendar, TrendingUp, DollarSign } from "lucide-react";
+import { IndianRupee, Calendar, TrendingUp, DollarSign, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useNavigate } from "react-router-dom";
 
 interface RevenueSummary {
     total_revenue: number | string | null;
@@ -14,6 +15,7 @@ interface RevenueSummary {
 }
 
 const AdminAnalytics = () => {
+    const navigate = useNavigate();
     const [loading, setLoading] = useState(true);
 
     // Stats
@@ -102,13 +104,22 @@ const AdminAnalytics = () => {
                         </div>
 
                         {/* Monthly */}
-                        <div className="bg-card rounded-2xl p-4 border border-border/50 shadow-sm">
-                            <div className="flex items-center gap-2 mb-2">
-                                <Calendar className="w-4 h-4 text-orange-500" />
-                                <span className="text-xs font-medium text-muted-foreground">This Month</span>
+                        <button
+                            type="button"
+                            onClick={() => navigate("/admin/analytics/calendar")}
+                            className="bg-card rounded-2xl p-4 border border-border/50 shadow-sm text-left transition-colors hover:border-primary/40 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                            aria-label="Open monthly revenue calendar"
+                        >
+                            <div className="flex items-center justify-between gap-2 mb-2">
+                                <div className="flex items-center gap-2">
+                                    <Calendar className="w-4 h-4 text-orange-500" />
+                                    <span className="text-xs font-medium text-muted-foreground">This Month</span>
+                                </div>
+                                <ArrowRight className="w-4 h-4 text-muted-foreground" />
                             </div>
                             <h3 className="text-xl font-bold">₹{monthlyRevenue.toLocaleString()}</h3>
-                        </div>
+                            <p className="text-[11px] text-muted-foreground mt-1">Open calendar</p>
+                        </button>
 
                         {/* Weekly */}
                         <div className="bg-card rounded-2xl p-4 border border-border/50 shadow-sm">

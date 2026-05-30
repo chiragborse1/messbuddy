@@ -29,6 +29,7 @@ import AdminLeaves from "./pages/admin/AdminLeaves";
 import AdminProfile from "./pages/admin/AdminProfile";
 import AdminChat from "./pages/admin/AdminChat";
 import AdminAnalytics from "./pages/admin/AdminAnalytics";
+import AdminAnalyticsCalendar from "./pages/admin/AdminAnalyticsCalendar";
 import AdminNotifications from "./pages/admin/AdminNotifications";
 import NotFound from "./pages/NotFound";
 import AuthCallback from "./pages/AuthCallback";
@@ -79,6 +80,7 @@ const AppWithNotifications = () => {
           <Route path="/admin/payments" element={<ProtectedRoute requiredRole="admin"><AdminPayments /></ProtectedRoute>} />
           <Route path="/admin/leaves" element={<ProtectedRoute requiredRole="admin"><AdminLeaves /></ProtectedRoute>} />
           <Route path="/admin/analytics" element={<ProtectedRoute requiredRole="admin"><AdminAnalytics /></ProtectedRoute>} />
+          <Route path="/admin/analytics/calendar" element={<ProtectedRoute requiredRole="admin"><AdminAnalyticsCalendar /></ProtectedRoute>} />
           <Route path="/admin/notifications" element={<ProtectedRoute requiredRole="admin"><AdminNotifications /></ProtectedRoute>} />
           <Route path="/admin/chat" element={<ProtectedRoute requiredRole="admin"><AdminChat /></ProtectedRoute>} />
           <Route path="/admin/profile" element={<ProtectedRoute requiredRole="admin"><AdminProfile /></ProtectedRoute>} />
