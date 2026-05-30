@@ -251,25 +251,27 @@ const AdminDashboard = () => {
             });
           } catch (e) {
             console.error("Dashboard notification failed:", e);
-          };
-          fetchAndNotify();
-        }
-
-        // Broadcast meal status change
-        const channel = supabase.channel('mess_status_updates');
-        channel.subscribe((status) => {
-          if (status === 'SUBSCRIBED') {
-            channel.send({
-              type: 'broadcast',
-              event: 'meal_toggled',
-              payload: { mealReady: newStatus }
-            });
           }
-        });
+        };
 
-        toast({ title: newStatus ? "Meal marked as Ready" : "Meal marked as Preparing" });
+        fetchAndNotify();
       }
-    };
+
+      // Broadcast meal status change
+      const channel = supabase.channel('mess_status_updates');
+      channel.subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          channel.send({
+            type: 'broadcast',
+            event: 'meal_toggled',
+            payload: { mealReady: newStatus }
+          });
+        }
+      });
+
+      toast({ title: newStatus ? "Meal marked as Ready" : "Meal marked as Preparing" });
+    }
+  };
 
     // Show nothing while checking auth
     if (authLoading) return <div className="min-h-screen bg-background flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;

@@ -40,7 +40,7 @@ const App = () => {
       <UserProvider>
         <AppWithNotifications />
       </UserProvider>
-      <SpeedInsights />
+      {import.meta.env.PROD && <SpeedInsights />}
     </QueryClientProvider>
   );
 };
@@ -52,7 +52,7 @@ const AppWithNotifications = () => {
     <TooltipProvider>
       <Toaster />
       <Sonner />
-      <BrowserRouter>
+      <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <Routes>
           <Route path="/" element={<LandingPage />} />
           <Route path="/login" element={<LoginPage />} />

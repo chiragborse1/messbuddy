@@ -169,6 +169,7 @@ const LoginPage = () => {
             <Input
               id="email"
               type="email"
+              autoComplete="email"
               placeholder="Enter your email"
               className="h-12 rounded-xl"
               value={credentials.email}
@@ -182,6 +183,7 @@ const LoginPage = () => {
               <Input
                 id="password"
                 type={showPassword ? "text" : "password"}
+                autoComplete="current-password"
                 placeholder="••••••••"
                 className="h-12 rounded-xl pr-12"
                 value={credentials.password}

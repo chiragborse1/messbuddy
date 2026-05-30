@@ -180,6 +180,7 @@ const SignupPage = () => {
             <Label>Full Name</Label>
             <Input
               placeholder="John Doe"
+              autoComplete="name"
               className="h-12 rounded-xl"
               required
               value={formData.name}
@@ -191,6 +192,7 @@ const SignupPage = () => {
             <Input
               placeholder="+91 98765 43210"
               type="tel"
+              autoComplete="tel"
               className="h-12 rounded-xl"
               required
               value={formData.mobile}
@@ -202,6 +204,7 @@ const SignupPage = () => {
             <Input
               placeholder="john@college.edu"
               type="email"
+              autoComplete="email"
               className="h-12 rounded-xl"
               required
               value={formData.email}
@@ -235,6 +238,7 @@ const SignupPage = () => {
             <Input
               placeholder="Create a password"
               type="password"
+              autoComplete="new-password"
               className="h-12 rounded-xl"
               required
               minLength={6}
