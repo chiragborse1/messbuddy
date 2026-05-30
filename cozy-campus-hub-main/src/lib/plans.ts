@@ -11,6 +11,18 @@ export interface MessPlan {
   durationType: PlanDurationType;
 }
 
+export interface MembershipPlanRecord {
+  id: number | string;
+  label: string;
+  price: number | string;
+  description?: string | null;
+  audience: PlanAudience;
+  duration_type?: PlanDurationType | null;
+  durationType?: PlanDurationType | null;
+  is_active?: boolean | null;
+  sort_order?: number | null;
+}
+
 export const MESS_PLANS: readonly MessPlan[] = [
   {
     id: 1,
@@ -86,6 +98,37 @@ const PLAN_ALIASES: Record<string, string> = {
 const normalizeLookupKey = (value: string) =>
   value.trim().replace(/\s+/g, " ").toLowerCase();
 
+export const mapMembershipPlanRecord = (plan: MembershipPlanRecord): MessPlan => ({
+  id: Number(plan.id),
+  label: plan.label,
+  price: Number(plan.price) || 0,
+  description: plan.description || "",
+  audience: plan.audience,
+  durationType: plan.durationType || plan.duration_type || "monthly",
+});
+
+const normalizePlanDefinition = (plan: MembershipPlanRecord | MembershipPlanRecord[] | null | undefined) => {
+  if (Array.isArray(plan)) return plan[0] ? mapMembershipPlanRecord(plan[0]) : undefined;
+  return plan ? mapMembershipPlanRecord(plan) : undefined;
+};
+
+const inferPlanDurationType = (planLabel: string | null | undefined): PlanDurationType | undefined => {
+  const key = normalizeLookupKey(stripPartialPlanSuffix(planLabel ?? ""));
+  if (!key) return undefined;
+  if (key.includes("monthly") || key.includes("month")) return "monthly";
+  if (key.includes("day")) return "day";
+  if (key.includes("time") || key.includes("meal")) return "time";
+  return undefined;
+};
+
+const getPlanDurationType = (
+  planLabel: string | null | undefined,
+  planDefinition?: MembershipPlanRecord | MembershipPlanRecord[] | null,
+) => {
+  const dynamicPlan = normalizePlanDefinition(planDefinition);
+  return dynamicPlan?.durationType ?? getPlanByLabel(planLabel)?.durationType ?? inferPlanDurationType(planLabel);
+};
+
 export const stripPartialPlanSuffix = (planLabel: string) =>
   planLabel.replace(/\s*\(partial\)\s*$/i, "").trim();
 
@@ -123,7 +166,10 @@ export const getPlanByLabel = (planLabel: string | null | undefined) => {
 
 export const getPlanPrice = (
   plan: string | number | MessPlan | null | undefined,
+  planDefinition?: MembershipPlanRecord | MembershipPlanRecord[] | null,
 ) => {
+  const dynamicPlan = normalizePlanDefinition(planDefinition);
+  if (dynamicPlan) return dynamicPlan.price;
   if (typeof plan === "number") return getPlanById(plan)?.price;
   if (typeof plan === "string") return getPlanByLabel(plan)?.price;
   return plan?.price;
@@ -148,13 +194,14 @@ const daysInStartMonth = (date: Date) =>
 export const calculatePlanEndDate = (
   start: PlanDateInput,
   planLabel: string | null | undefined,
+  planDefinition?: MembershipPlanRecord | MembershipPlanRecord[] | null,
 ) => {
   const startDate = toValidDate(start);
-  const plan = getPlanByLabel(planLabel);
+  const durationType = getPlanDurationType(planLabel, planDefinition);
 
-  if (!startDate || !plan) return null;
+  if (!startDate || !durationType) return null;
 
-  if (plan.durationType === "monthly") {
+  if (durationType === "monthly") {
     return addDays(startDate, daysInStartMonth(startDate));
   }
 
@@ -173,16 +220,18 @@ export interface PendingBalanceInput {
   planLabel: string | null | undefined;
   amountPaid: number | string | null | undefined;
   existingPendingAmount?: number | string | null;
+  planDefinition?: MembershipPlanRecord | MembershipPlanRecord[] | null;
 }
 
 export const calculatePendingBalance = ({
   planLabel,
   amountPaid,
   existingPendingAmount = 0,
+  planDefinition,
 }: PendingBalanceInput) => {
   const paidAmount = toMoneyNumber(amountPaid);
   const currentPending = toMoneyNumber(existingPendingAmount);
-  const fullPlanPrice = getPlanPrice(planLabel);
+  const fullPlanPrice = getPlanPrice(planLabel, planDefinition);
   const expectedCharge = isPartialPlanLabel(planLabel)
     ? fullPlanPrice ?? paidAmount
     : paidAmount;
@@ -194,6 +243,7 @@ export interface PaymentPlanInput {
   plan_name?: string | null;
   amount?: number | string | null;
   membership_start_date?: PlanDateInput;
+  membership_plans?: MembershipPlanRecord | MembershipPlanRecord[] | null;
 }
 
 export interface ProfilePlanSnapshot {
@@ -206,6 +256,7 @@ export interface CalculatePaymentPlanUpdateInput {
   payment: PaymentPlanInput;
   profile?: ProfilePlanSnapshot | null;
   now?: PlanDateInput;
+  planDefinition?: MembershipPlanRecord | MembershipPlanRecord[] | null;
 }
 
 export interface PaymentPlanUpdate {
@@ -220,9 +271,11 @@ export const calculatePaymentPlanUpdate = ({
   payment,
   profile,
   now,
+  planDefinition,
 }: CalculatePaymentPlanUpdateInput): PaymentPlanUpdate => {
   const rawPlanName = payment.plan_name ?? "";
-  const normalizedPlanLabel = normalizePlanLabel(rawPlanName);
+  const dynamicPlan = normalizePlanDefinition(planDefinition ?? payment.membership_plans);
+  const normalizedPlanLabel = dynamicPlan?.label ?? normalizePlanLabel(rawPlanName);
   const strippedPlanName = stripPartialPlanSuffix(rawPlanName);
   const currentEndDate = toValidDate(profile?.plan_end_date);
   const nowDate = toValidDate(now) ?? new Date();
@@ -235,7 +288,7 @@ export const calculatePaymentPlanUpdate = ({
   startDate = new Date(startDate);
 
   const calculatedEndDate = normalizedPlanLabel
-    ? calculatePlanEndDate(startDate, normalizedPlanLabel)
+    ? calculatePlanEndDate(startDate, normalizedPlanLabel, dynamicPlan)
     : null;
   const newEndDate = calculatedEndDate ?? currentEndDate ?? new Date(nowDate);
   const fallbackPlan = strippedPlanName || profile?.plan || null;
@@ -249,29 +302,33 @@ export const calculatePaymentPlanUpdate = ({
       planLabel: rawPlanName,
       amountPaid: payment.amount,
       existingPendingAmount: profile?.pending_amount,
+      planDefinition: dynamicPlan,
     }),
   };
 };
 
 export interface CalculatePaymentRevokeUpdateInput {
-  payment: Pick<PaymentPlanInput, "plan_name">;
+  payment: Pick<PaymentPlanInput, "plan_name" | "membership_plans">;
   profile: Pick<ProfilePlanSnapshot, "plan_end_date">;
+  planDefinition?: MembershipPlanRecord | MembershipPlanRecord[] | null;
 }
 
 export const calculatePaymentRevokeUpdate = ({
   payment,
   profile,
+  planDefinition,
 }: CalculatePaymentRevokeUpdateInput) => {
   const currentEndDate = toValidDate(profile?.plan_end_date);
   if (!currentEndDate) return null;
 
-  const normalizedPlanLabel = normalizePlanLabel(payment.plan_name);
-  const plan = normalizedPlanLabel ? getPlanByLabel(normalizedPlanLabel) : null;
+  const dynamicPlan = normalizePlanDefinition(planDefinition ?? payment.membership_plans);
+  const normalizedPlanLabel = dynamicPlan?.label ?? normalizePlanLabel(payment.plan_name);
   const rawPlanName = stripPartialPlanSuffix(payment.plan_name ?? "");
-  if (!plan && !rawPlanName) return null;
+  const durationType = getPlanDurationType(normalizedPlanLabel ?? rawPlanName, dynamicPlan);
+  if (!durationType && !rawPlanName) return null;
 
   const shouldTreatAsMonthly =
-    plan?.durationType === "monthly" || /monthly/i.test(rawPlanName);
+    durationType === "monthly" || /monthly/i.test(rawPlanName);
 
   const revokedEndDate = new Date(currentEndDate);
   if (shouldTreatAsMonthly) {

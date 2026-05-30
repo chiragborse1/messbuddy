@@ -352,15 +352,15 @@ const AdminDashboard = () => {
       },
       {
         icon: Bell,
-        label: "Notifications",
-        value: "Manage",
+        label: "",
+        value: "Notifications",
         color: "text-orange-500",
         path: "/admin/notifications"
       },
       {
         icon: MessageCircle,
-        label: "Community Chat",
-        value: "Open",
+        label: "",
+        value: "Chat",
         color: "text-green-500",
         path: "/admin/chat"
       },
@@ -449,13 +449,13 @@ const AdminDashboard = () => {
               <div className="grid grid-cols-2 gap-3 mt-6 pb-20">
                 {statCards.map((stat) => (
                   <button
-                    key={stat.label}
+                    key={stat.path}
                     onClick={() => navigate(stat.path)}
                     className="bg-card rounded-2xl border border-border/50 p-4 shadow-sm text-left hover:border-primary/30 transition-colors"
                   >
                     <stat.icon className={`w-6 h-6 ${stat.color} mb-3`} />
                     <p className="text-2xl font-bold">{stat.value}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">{stat.label}</p>
+                    {stat.label && <p className="text-xs text-muted-foreground mt-0.5">{stat.label}</p>}
                   </button>
                 ))}
               </div>

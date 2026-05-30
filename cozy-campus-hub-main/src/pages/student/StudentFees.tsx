@@ -9,7 +9,7 @@ import { useUser } from "@/hooks/useUser";
 import { toast } from "@/hooks/use-toast";
 import { MessReceiptTicket } from "@/components/ui/ticket-confirmation-card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { getPlanById, MESS_PLANS } from "@/lib/plans";
+import { mapMembershipPlanRecord, MessPlan, MESS_PLANS } from "@/lib/plans";
 import { validateImageFile } from "@/lib/uploads";
 
 const StudentFees = () => {
@@ -18,11 +18,30 @@ const StudentFees = () => {
   const [uploading, setUploading] = useState(false);
   const [startDate, setStartDate] = useState("");
   const [myPayments, setMyPayments] = useState<any[]>([]);
+  const [plans, setPlans] = useState<MessPlan[]>([...MESS_PLANS]);
   const [receiptPayment, setReceiptPayment] = useState<any | null>(null);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [isPartialPayment, setIsPartialPayment] = useState(false);
   const [partialAmount, setPartialAmount] = useState("");
   const receiptRef = useRef<HTMLDivElement>(null);
+
+  const selectedPlan = selectedPlanId ? plans.find((plan) => plan.id === selectedPlanId) : undefined;
+
+  const fetchPlans = useCallback(async () => {
+    const { data, error } = await supabase
+      .from('membership_plans')
+      .select('id, label, price, description, audience, duration_type, is_active, sort_order')
+      .eq('is_active', true)
+      .order('sort_order', { ascending: true })
+      .order('id', { ascending: true });
+
+    if (error) {
+      console.error("Plan fetch error:", error);
+      return;
+    }
+
+    setPlans((data && data.length > 0) ? data.map(mapMembershipPlanRecord) : [...MESS_PLANS]);
+  }, []);
 
   const fetchPayments = useCallback(async (_silent = false) => {
     if (!user?.id) return;
@@ -34,6 +53,27 @@ const StudentFees = () => {
       .order('created_at', { ascending: false });
     if (data) setMyPayments(data);
   }, [user?.id]);
+
+  useEffect(() => {
+    fetchPlans();
+
+    const channel = supabase
+      .channel('student_membership_plans_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'membership_plans' }, () => fetchPlans())
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [fetchPlans]);
+
+  useEffect(() => {
+    if (selectedPlanId && !plans.some((plan) => plan.id === selectedPlanId)) {
+      setSelectedPlanId(null);
+      setIsPartialPayment(false);
+      setPartialAmount("");
+    }
+  }, [plans, selectedPlanId]);
 
   useEffect(() => {
     if (user?.id) {
@@ -77,17 +117,16 @@ const StudentFees = () => {
       return;
     }
 
-    const plan = getPlanById(selectedPlanId);
-    if (!plan) return;
+    if (!selectedPlan) return;
 
     const partialPaymentAmount = Number(partialAmount);
     if (
       isPartialPayment &&
-      (!Number.isFinite(partialPaymentAmount) || partialPaymentAmount <= 0 || partialPaymentAmount >= plan.price)
+      (!Number.isFinite(partialPaymentAmount) || partialPaymentAmount <= 0 || partialPaymentAmount >= selectedPlan.price)
     ) {
       toast({
         title: "Invalid installment amount",
-        description: `Enter an amount between ₹1 and ₹${plan.price - 1}.`,
+        description: `Enter an amount between ₹1 and ₹${selectedPlan.price - 1}.`,
         variant: "destructive",
       });
       e.target.value = '';
@@ -111,13 +150,14 @@ const StudentFees = () => {
         .getPublicUrl(fileName);
 
       // 3. Insert Record
-      const finalAmount = isPartialPayment ? partialPaymentAmount : plan.price;
-      const planLabel = isPartialPayment ? `${plan.label} (Partial)` : plan.label;
+      const finalAmount = isPartialPayment ? partialPaymentAmount : selectedPlan.price;
+      const planLabel = isPartialPayment ? `${selectedPlan.label} (Partial)` : selectedPlan.label;
 
       const { data: paymentRecord, error: insertError } = await supabase.from('payments').insert({
         user_id: user.id,
         amount: finalAmount,
         plan_name: planLabel,
+        membership_plan_id: selectedPlan.id,
         screenshot_url: publicUrl,
         membership_start_date: startDate,
         status: 'pending'
@@ -264,7 +304,7 @@ const StudentFees = () => {
                       </TabsList>
 
                       <TabsContent value="boys" className="space-y-3 mt-0">
-                        {MESS_PLANS.filter(p => p.audience === "boys").map((plan) => (
+                        {plans.filter(p => p.audience === "boys").map((plan) => (
                           <button
                             key={plan.id}
                             onClick={() => {
@@ -288,7 +328,7 @@ const StudentFees = () => {
                       </TabsContent>
 
                       <TabsContent value="girls" className="space-y-3 mt-0">
-                        {MESS_PLANS.filter(p => p.audience === "girls").map((plan) => (
+                        {plans.filter(p => p.audience === "girls").map((plan) => (
                           <button
                             key={plan.id}
                             onClick={() => {
@@ -357,7 +397,7 @@ const StudentFees = () => {
                   )}
 
                   {/* Payment Section */}
-                  {selectedPlanId && (
+                  {selectedPlan && (
                     <div className="pt-4 border-t border-dashed border-border/50">
                       {/* Partial Payment Toggle */}
                       <div className="mb-6 p-4 bg-muted/30 rounded-2xl border border-secondary/30">
@@ -381,7 +421,7 @@ const StudentFees = () => {
                               <input
                                 type="number"
                                 min={1}
-                                max={Math.max(1, (getPlanById(selectedPlanId)?.price || 1) - 1)}
+                                max={Math.max(1, (selectedPlan?.price || 1) - 1)}
                                 step={1}
                                 placeholder="Amount paying now"
                                 value={partialAmount}
@@ -418,11 +458,10 @@ const StudentFees = () => {
 
                       {/* Pay via App Buttons */}
                       {(() => {
-                        const plan = getPlanById(selectedPlanId);
                         const partialValue = Number(partialAmount);
-                        const hasValidPartialAmount = Number.isFinite(partialValue) && partialValue > 0 && !!plan && partialValue < plan.price;
-                        const displayPrice = isPartialPayment ? (hasValidPartialAmount ? partialValue : 0) : (plan?.price || 0);
-                        const upiParams = `pa=9359447581@ibl&pn=Akshay+Anil+Patil&am=${displayPrice}&cu=INR&tn=${encodeURIComponent(plan?.label ?? 'Mess Plan')}`;
+                        const hasValidPartialAmount = Number.isFinite(partialValue) && partialValue > 0 && !!selectedPlan && partialValue < selectedPlan.price;
+                        const displayPrice = isPartialPayment ? (hasValidPartialAmount ? partialValue : 0) : (selectedPlan?.price || 0);
+                        const upiParams = `pa=9359447581@ibl&pn=Akshay+Anil+Patil&am=${displayPrice}&cu=INR&tn=${encodeURIComponent(selectedPlan?.label ?? 'Mess Plan')}`;
                         const upiApps = [
                           {
                             name: "Google Pay",

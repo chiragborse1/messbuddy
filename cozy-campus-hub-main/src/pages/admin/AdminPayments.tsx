@@ -1,20 +1,49 @@
 import { useState, useEffect } from "react";
 import PageShell from "@/components/PageShell";
 import AdminBottomNav from "@/components/AdminBottomNav";
-import StatusBadge from "@/components/StatusBadge";
 import ConfirmActionDialog from "@/components/ConfirmActionDialog";
 import { Button } from "@/components/ui/button";
-import { Check, X, Loader2, ExternalLink, Image as ImageIcon, RotateCcw, Trash2 } from "lucide-react";
+import { Check, X, Loader2, ExternalLink, Image as ImageIcon, RotateCcw, Trash2, Plus, Pencil, Eye, EyeOff, Save } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PaymentSwipeCard } from "@/components/PaymentSwipeCard"; // Ensure this path is correct
 import { AnimatePresence, motion } from "framer-motion";
-import { calculatePaymentPlanUpdate, calculatePaymentRevokeUpdate } from "@/lib/plans";
+import { calculatePaymentPlanUpdate, calculatePaymentRevokeUpdate, MembershipPlanRecord, PlanAudience, PlanDurationType } from "@/lib/plans";
 
 type PaymentConfirmAction =
   | { type: "revoke"; paymentId: number; planName?: string }
   | { type: "delete"; paymentId: number; planName?: string };
+
+type AdminMembershipPlan = MembershipPlanRecord & {
+  is_active: boolean;
+  sort_order: number | null;
+};
+
+type PlanFormState = {
+  label: string;
+  price: string;
+  description: string;
+  audience: PlanAudience;
+  duration_type: PlanDurationType;
+  is_active: boolean;
+  sort_order: string;
+};
+
+const emptyPlanForm: PlanFormState = {
+  label: "",
+  price: "",
+  description: "",
+  audience: "boys",
+  duration_type: "monthly",
+  is_active: true,
+  sort_order: "100",
+};
+
+const getPaymentPlanDefinition = (payment: any) => {
+  if (Array.isArray(payment?.membership_plans)) return payment.membership_plans[0] ?? null;
+  return payment?.membership_plans ?? null;
+};
 
 const AdminPayments = () => {
   const [payments, setPayments] = useState<any[]>([]);
@@ -23,6 +52,11 @@ const AdminPayments = () => {
   const [zoomedImage, setZoomedImage] = useState<string | null>(null);
   const [confirmAction, setConfirmAction] = useState<PaymentConfirmAction | null>(null);
   const [confirmLoading, setConfirmLoading] = useState(false);
+  const [membershipPlans, setMembershipPlans] = useState<AdminMembershipPlan[]>([]);
+  const [plansLoading, setPlansLoading] = useState(false);
+  const [editingPlanId, setEditingPlanId] = useState<number | null>(null);
+  const [planForm, setPlanForm] = useState<PlanFormState>(emptyPlanForm);
+  const [savingPlan, setSavingPlan] = useState(false);
 
   const fetchPayments = async (isBackground = false) => {
     if (!isBackground) setLoading(true);
@@ -36,6 +70,7 @@ const AdminPayments = () => {
                     plan_name,
                     screenshot_url,
                     membership_start_date,
+                    membership_plan_id,
                     transaction_id,
                     status,
                     created_at,
@@ -43,6 +78,12 @@ const AdminPayments = () => {
                         name,
                         college,
                         photo_url
+                    ),
+                    membership_plans (
+                        id,
+                        label,
+                        price,
+                        duration_type
                     )
                 `)
         .order('created_at', { ascending: false });
@@ -54,6 +95,25 @@ const AdminPayments = () => {
       if (!isBackground) toast({ title: "Failed to load payments", description: error.message, variant: "destructive" });
     } finally {
       if (!isBackground) setLoading(false);
+    }
+  };
+
+  const fetchMembershipPlans = async (isBackground = false) => {
+    if (!isBackground) setPlansLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('membership_plans')
+        .select('id, label, price, description, audience, duration_type, is_active, sort_order')
+        .order('sort_order', { ascending: true })
+        .order('id', { ascending: true });
+
+      if (error) throw error;
+      setMembershipPlans((data || []) as AdminMembershipPlan[]);
+    } catch (error: any) {
+      console.error("Fetch membership plans error:", error);
+      if (!isBackground) toast({ title: "Failed to load plans", description: error.message, variant: "destructive" });
+    } finally {
+      if (!isBackground) setPlansLoading(false);
     }
   };
 
@@ -74,6 +134,95 @@ const AdminPayments = () => {
       supabase.removeChannel(channel);
     };
   }, []);
+
+  useEffect(() => {
+    fetchMembershipPlans();
+
+    const channel = supabase
+      .channel('admin_membership_plans_realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'membership_plans' },
+        () => fetchMembershipPlans(true)
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  const resetPlanForm = () => {
+    setEditingPlanId(null);
+    setPlanForm(emptyPlanForm);
+  };
+
+  const editPlan = (plan: AdminMembershipPlan) => {
+    setEditingPlanId(Number(plan.id));
+    setPlanForm({
+      label: plan.label,
+      price: String(plan.price),
+      description: plan.description || "",
+      audience: plan.audience,
+      duration_type: plan.duration_type || plan.durationType || "monthly",
+      is_active: plan.is_active,
+      sort_order: String(plan.sort_order ?? 100),
+    });
+  };
+
+  const savePlan = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    const price = Number(planForm.price);
+    if (!planForm.label.trim() || !Number.isFinite(price) || price <= 0) {
+      toast({ title: "Invalid plan", description: "Plan name and valid price are required.", variant: "destructive" });
+      return;
+    }
+
+    setSavingPlan(true);
+    try {
+      const payload = {
+        label: planForm.label.trim(),
+        price,
+        description: planForm.description.trim(),
+        audience: planForm.audience,
+        duration_type: planForm.duration_type,
+        is_active: planForm.is_active,
+        sort_order: Number(planForm.sort_order) || 100,
+      };
+
+      const request = editingPlanId
+        ? supabase.from('membership_plans').update(payload).eq('id', editingPlanId)
+        : supabase.from('membership_plans').insert(payload);
+
+      const { error } = await request;
+      if (error) throw error;
+
+      toast({ title: editingPlanId ? "Plan updated" : "Plan added" });
+      resetPlanForm();
+      fetchMembershipPlans();
+    } catch (error: any) {
+      console.error("Save plan error:", error);
+      toast({ title: "Plan save failed", description: error.message, variant: "destructive" });
+    } finally {
+      setSavingPlan(false);
+    }
+  };
+
+  const togglePlanActive = async (plan: AdminMembershipPlan) => {
+    try {
+      const { error } = await supabase
+        .from('membership_plans')
+        .update({ is_active: !plan.is_active })
+        .eq('id', plan.id);
+
+      if (error) throw error;
+      toast({ title: !plan.is_active ? "Plan shown to students" : "Plan hidden from students" });
+      fetchMembershipPlans(true);
+    } catch (error: any) {
+      toast({ title: "Plan update failed", description: error.message, variant: "destructive" });
+    }
+  };
 
   const updateStatus = async (id: number, status: string) => {
     // Optimistic Update: Change local state immediately
@@ -103,7 +252,7 @@ const AdminPayments = () => {
             .eq('id', payment.user_id)
             .single();
 
-          const update = calculatePaymentPlanUpdate({ payment, profile });
+          const update = calculatePaymentPlanUpdate({ payment, profile, planDefinition: getPaymentPlanDefinition(payment) });
 
           await supabase.from('profiles').update(update).eq('id', payment.user_id);
         }
@@ -149,7 +298,7 @@ const AdminPayments = () => {
         .eq('id', payment.user_id)
         .single();
 
-      const revokeUpdate = calculatePaymentRevokeUpdate({ payment, profile });
+      const revokeUpdate = calculatePaymentRevokeUpdate({ payment, profile, planDefinition: getPaymentPlanDefinition(payment) });
       if (revokeUpdate) {
         await supabase.from('profiles').update(revokeUpdate).eq('id', payment.user_id);
       }
@@ -227,14 +376,14 @@ const AdminPayments = () => {
         subtitle="Review & Verify Payments"
         className="pb-4"
         action={
-          <Button variant="outline" size="sm" onClick={() => fetchPayments()} disabled={loading} className="gap-2">
+          <Button variant="outline" size="sm" onClick={() => { fetchPayments(); fetchMembershipPlans(); }} disabled={loading || plansLoading} className="gap-2">
             <RotateCcw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
             Refresh
           </Button>
         }
       >
         <Tabs defaultValue="pending" className="w-full" onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-3 mb-6">
+          <TabsList className="grid w-full grid-cols-4 mb-6">
             <TabsTrigger value="pending" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
               Pending ({pendingPayments.length})
             </TabsTrigger>
@@ -243,6 +392,9 @@ const AdminPayments = () => {
             </TabsTrigger>
             <TabsTrigger value="rejected" className="data-[state=active]:bg-destructive data-[state=active]:text-white">
               Rejected
+            </TabsTrigger>
+            <TabsTrigger value="plans" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+              Plans
             </TabsTrigger>
           </TabsList>
 
@@ -315,6 +467,153 @@ const AdminPayments = () => {
                 rejectedPayments.map(p => (
                   <PaymentListItem key={p.id} payment={p} onDelete={requestDelete} showRevoke={false} onImageClick={setZoomedImage} />
                 ))
+              )}
+            </div>
+          </TabsContent>
+
+          <TabsContent value="plans" className="w-full mt-4">
+            <div className="space-y-4 pb-4">
+              <form onSubmit={savePlan} className="bg-card rounded-2xl border border-border/50 p-4 shadow-sm space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <h3 className="font-bold">{editingPlanId ? "Edit Plan" : "Add Plan"}</h3>
+                    <p className="text-xs text-muted-foreground">Controls what students see in Fees.</p>
+                  </div>
+                  {editingPlanId ? (
+                    <Button type="button" variant="ghost" size="sm" onClick={resetPlanForm}>
+                      <Plus className="w-4 h-4" />
+                      New
+                    </Button>
+                  ) : null}
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-muted-foreground">Plan Name</label>
+                  <input
+                    value={planForm.label}
+                    onChange={(e) => setPlanForm({ ...planForm, label: e.target.value })}
+                    placeholder="Boys Monthly Mess"
+                    className="w-full h-11 rounded-xl border border-border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/20"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <label className="text-xs font-semibold text-muted-foreground">Price</label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={planForm.price}
+                      onChange={(e) => setPlanForm({ ...planForm, price: e.target.value })}
+                      placeholder="1300"
+                      className="w-full h-11 rounded-xl border border-border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/20"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-semibold text-muted-foreground">Sort</label>
+                    <input
+                      type="number"
+                      value={planForm.sort_order}
+                      onChange={(e) => setPlanForm({ ...planForm, sort_order: e.target.value })}
+                      className="w-full h-11 rounded-xl border border-border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/20"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <label className="text-xs font-semibold text-muted-foreground">Audience</label>
+                    <select
+                      value={planForm.audience}
+                      onChange={(e) => setPlanForm({ ...planForm, audience: e.target.value as PlanAudience })}
+                      className="w-full h-11 rounded-xl border border-border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/20"
+                    >
+                      <option value="boys">Boys</option>
+                      <option value="girls">Girls</option>
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-semibold text-muted-foreground">Duration</label>
+                    <select
+                      value={planForm.duration_type}
+                      onChange={(e) => setPlanForm({ ...planForm, duration_type: e.target.value as PlanDurationType })}
+                      className="w-full h-11 rounded-xl border border-border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/20"
+                    >
+                      <option value="monthly">Monthly</option>
+                      <option value="day">1 Day</option>
+                      <option value="time">1 Time</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-muted-foreground">Description</label>
+                  <input
+                    value={planForm.description}
+                    onChange={(e) => setPlanForm({ ...planForm, description: e.target.value })}
+                    placeholder="2 meals/day access"
+                    className="w-full h-11 rounded-xl border border-border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/20"
+                  />
+                </div>
+
+                <label className="flex items-center justify-between gap-3 rounded-xl border border-border/50 bg-muted/30 p-3">
+                  <span>
+                    <span className="block text-sm font-semibold">Show to students</span>
+                    <span className="block text-xs text-muted-foreground">Hidden plans stay usable for old payments.</span>
+                  </span>
+                  <input
+                    type="checkbox"
+                    checked={planForm.is_active}
+                    onChange={(e) => setPlanForm({ ...planForm, is_active: e.target.checked })}
+                    className="w-5 h-5 rounded border-gray-300 text-primary focus:ring-primary"
+                  />
+                </label>
+
+                <Button type="submit" className="w-full rounded-xl" disabled={savingPlan}>
+                  {savingPlan ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                  {editingPlanId ? "Save Changes" : "Add Plan"}
+                </Button>
+              </form>
+
+              {plansLoading ? (
+                <div className="flex justify-center py-10">
+                  <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                </div>
+              ) : membershipPlans.length === 0 ? (
+                <p className="text-center py-10 text-muted-foreground">No plans found.</p>
+              ) : (
+                <div className="space-y-3">
+                  {membershipPlans.map((plan) => (
+                    <div key={plan.id} className="bg-card rounded-2xl border border-border/50 p-4 shadow-sm">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className="font-semibold text-sm truncate">{plan.label}</p>
+                            {!plan.is_active && (
+                              <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-bold text-muted-foreground">Hidden</span>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-0.5">{plan.description || "No description"}</p>
+                          <p className="text-[11px] text-muted-foreground mt-1 capitalize">
+                            {plan.audience} • {plan.duration_type || plan.durationType}
+                          </p>
+                        </div>
+                        <p className="text-lg font-bold text-primary shrink-0">₹{Number(plan.price).toLocaleString()}</p>
+                      </div>
+
+                      <div className="flex gap-2 mt-4">
+                        <Button type="button" variant="outline" size="sm" className="flex-1 rounded-xl" onClick={() => editPlan(plan)}>
+                          <Pencil className="w-4 h-4" />
+                          Edit
+                        </Button>
+                        <Button type="button" variant="outline" size="sm" className="flex-1 rounded-xl" onClick={() => togglePlanActive(plan)}>
+                          {plan.is_active ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                          {plan.is_active ? "Hide" : "Show"}
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
           </TabsContent>

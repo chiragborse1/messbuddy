@@ -225,14 +225,13 @@ const StudentDashboard = () => {
 
           {/* Actions Grid */}
           <div className="grid grid-cols-2 gap-3">
-            {/* Community Chat Card */}
+            {/* Chat Card */}
             <div
               className="bg-card rounded-2xl p-4 border border-border/50 shadow-sm cursor-pointer active:scale-95 transition-transform"
               onClick={() => navigate("/student/chat")}
             >
               <MessageCircle className="w-5 h-5 text-green-600 mb-2" />
-              <p className="text-xs text-muted-foreground">Community Chat</p>
-              <p className="text-sm font-semibold">Join Conversation</p>
+              <p className="text-sm font-semibold">Chat</p>
             </div>
 
             {/* Feedback Card */}

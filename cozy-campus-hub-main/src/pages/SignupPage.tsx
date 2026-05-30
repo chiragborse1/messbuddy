@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,13 +6,14 @@ import { Label } from "@/components/ui/label";
 import { ArrowLeft, Camera, CheckCircle2, Loader2, AlertCircle } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/hooks/use-toast";
-import { MESS_PLANS } from "@/lib/plans";
+import { mapMembershipPlanRecord, MessPlan, MESS_PLANS } from "@/lib/plans";
 import { validateImageFile } from "@/lib/uploads";
 
 const SignupPage = () => {
   const navigate = useNavigate();
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [plans, setPlans] = useState<MessPlan[]>([...MESS_PLANS]);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [formData, setFormData] = useState({
@@ -77,6 +78,23 @@ const SignupPage = () => {
     eventType: 'student_signup' as const,
     targetRole: 'admin' as const
   });
+
+  useEffect(() => {
+    const fetchPlans = async () => {
+      const { data, error } = await supabase
+        .from('membership_plans')
+        .select('id, label, price, description, audience, duration_type, is_active, sort_order')
+        .eq('is_active', true)
+        .order('sort_order', { ascending: true })
+        .order('id', { ascending: true });
+
+      if (!error && data && data.length > 0) {
+        setPlans(data.map(mapMembershipPlanRecord));
+      }
+    };
+
+    fetchPlans();
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -305,7 +323,7 @@ const SignupPage = () => {
                     required={formData.isExistingMember}
                   >
                     <option value="">Select Plan</option>
-                    {MESS_PLANS.map((plan) => (
+                    {plans.map((plan) => (
                       <option key={plan.id} value={plan.label}>
                         {plan.label} (₹{plan.price})
                       </option>
