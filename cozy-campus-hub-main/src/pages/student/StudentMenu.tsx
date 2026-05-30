@@ -23,7 +23,7 @@ const StudentMenu = () => {
       // 1. Fetch Menu Items & Config
       const { data: menuData, error: menuError } = await supabase
         .from('menu_items')
-        .select('*')
+        .select('id, name, category, votes, image_url')
         .order('id', { ascending: true });
 
       if (menuError) throw menuError;

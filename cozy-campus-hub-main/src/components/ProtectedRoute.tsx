@@ -1,6 +1,7 @@
 import { Navigate } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import { useUser } from "@/hooks/useUser";
+import { hasActiveStudentAccess, hasAdminAccess } from "@/lib/access";
 
 interface ProtectedRouteProps {
     children: React.ReactNode;
@@ -25,20 +26,15 @@ const ProtectedRoute = ({ children, requiredRole }: ProtectedRouteProps) => {
 
     if (!user) return <Navigate to="/" replace />;
 
-    // Both 'admin' and 'developer' roles can access admin routes
-    const hasAdminAccess = user.role === "admin" || user.role === "developer";
-    const hasStudentAccess = user.role === "student";
-
-    if (requiredRole === "admin" && !hasAdminAccess) {
+    if (requiredRole === "admin" && !hasAdminAccess(user)) {
         return <Navigate to="/student" replace />;
     }
 
-    if (requiredRole === "student" && !hasStudentAccess) {
-        return <Navigate to="/admin" replace />;
+    if (requiredRole === "student" && !hasActiveStudentAccess(user)) {
+        return <Navigate to={hasAdminAccess(user) ? "/admin" : "/"} replace />;
     }
 
     return <>{children}</>;
 };
 
 export default ProtectedRoute;
-

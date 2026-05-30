@@ -1,73 +1,97 @@
-# Welcome to your Lovable project
+# MessBuddy / Kanhaiya Mess
 
-## Project info
+MessBuddy is the Kanhaiya Mess management app for students and admins. It handles signups, mess plan status, payments, leave requests, menu voting, student management, and push/email reminders through Supabase and Firebase Cloud Messaging.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+## Stack
 
-## How can I edit this code?
+- Vite + React + TypeScript
+- Tailwind CSS + shadcn/ui components
+- Supabase Auth, Postgres, RLS, RPCs, and Edge Functions
+- Firebase Cloud Messaging for push notifications
+- Vitest, ESLint, and TypeScript checks
+- Capacitor Android project under `android/`
 
-There are several ways of editing your application.
+## Local Setup
 
-**Use Lovable**
-
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
-
-Changes made via Lovable will be committed automatically to this repo.
-
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
+Use Node.js with npm, then install dependencies:
 
 ```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+npm ci
+```
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+Create a local `.env` file with the public Supabase browser credentials:
 
-# Step 3: Install the necessary dependencies.
-npm i
+```env
+VITE_SUPABASE_URL=your-supabase-project-url
+VITE_SUPABASE_ANON_KEY=your-supabase-anon-key
+```
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
+Do not commit `.env`, service-role keys, Firebase service-account JSON, or other secrets.
+
+Start the Vite dev server:
+
+```sh
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+This repo's Vite config serves the app at `http://127.0.0.1:8080/`.
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+## Branch Workflow
 
-**Use GitHub Codespaces**
+- Work on the `dev` branch by default.
+- Use `main` only when explicitly instructed for a production-ready merge or release.
+- Open PRs into `dev` for normal changes unless the maintainer says otherwise.
+- Keep migrations and Edge Function changes reviewed together because database rules and app behavior are tightly coupled.
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+## Supabase
 
-## What technologies are used for this project?
+Apply tracked database migrations from `supabase/migrations/`:
 
-This project is built with:
+```sh
+supabase db push
+```
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+Current migration:
 
-## How can I deploy this project?
+- `supabase/migrations/20260530172853_harden_rls_and_voting.sql`
+- `supabase/migrations/20260530182502_notification_logs.sql`
+- `supabase/migrations/20260530183500_student_submission_guards.sql`
+- `supabase/migrations/20260530184000_active_student_access_guards.sql`
+- `supabase/migrations/20260530184500_admin_revenue_rpcs.sql`
 
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
+Deploy Edge Functions:
 
-## Can I connect a custom domain to my Lovable project?
+```sh
+supabase functions deploy payment-reminder
+supabase functions deploy send-notification
+supabase functions deploy delete-student
+```
 
-Yes, you can!
+Current function directories in this repo:
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+- `payment-reminder`
+- `send-notification`
+- `delete-student`
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+See [SUPABASE_SETUP.md](./SUPABASE_SETUP.md) for deployment prerequisites and function notes.
+
+## Available Scripts
+
+- `npm run dev` - start the local Vite dev server.
+- `npm run build` - create a production build.
+- `npm run build:dev` - build in Vite development mode.
+- `npm run preview` - serve the built app locally.
+- `npm run typecheck` - run TypeScript without emitting files.
+- `npm run lint` - run ESLint.
+- `npm run test` - run Vitest once.
+- `npm run test:watch` - run Vitest in watch mode.
+
+CI runs install, typecheck, lint, tests, and build on `dev` and `main`.
+
+## Security Notes
+
+- Only expose `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` to the frontend.
+- Keep `SUPABASE_SERVICE_ROLE_KEY`, Firebase service-account JSON, and email provider keys in Supabase secrets or the deployment platform secret store.
+- Do not make `profiles` publicly readable or store passwords in profile rows.
+- Keep voting writes behind the `vote_for_item(item_id, category_name)` RPC.
+- Treat admin/developer role checks and RLS migrations as production security boundaries.

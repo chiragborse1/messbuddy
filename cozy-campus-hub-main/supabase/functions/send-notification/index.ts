@@ -9,12 +9,14 @@ const corsHeaders = {
 }
 
 interface NotificationPayload {
-    title: string;
-    body: string;
+    title?: string;
+    body?: string;
     image?: string;
     topic?: string;
     userIds?: string[];
     targetRole?: 'student' | 'admin';
+    eventType?: 'student_signup' | 'payment_submitted' | 'leave_request';
+    resourceId?: string | number;
 }
 
 type Requester = {
@@ -23,21 +25,45 @@ type Requester = {
     isAdmin: boolean;
 }
 
+type SendCounts = {
+    sentCount: number;
+    successCount: number;
+    errorCount: number;
+}
+
 serve(async (req: Request) => {
     if (req.method === 'OPTIONS') {
         return new Response('ok', { headers: corsHeaders })
     }
 
+    let payload: NotificationPayload | null = null
+    let requester: Requester | null = null
+    let supabase: ReturnType<typeof createClient> | null = null
+    let counts: SendCounts = { sentCount: 0, successCount: 0, errorCount: 0 }
+    let notificationLogWritten = false
+    let shouldWriteNotificationLog = false
+
+    const writeNotificationLog = async () => {
+        if (!shouldWriteNotificationLog || !supabase || !requester || !payload || notificationLogWritten) return
+        notificationLogWritten = true
+        await insertNotificationLog(supabase, requester.id, payload, counts)
+    }
+
     try {
-        console.log("--- Notification Request Start ---");
-        const payload: NotificationPayload = await req.json()
+        const notificationPayload = await req.json() as NotificationPayload
+        payload = notificationPayload
         const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
         const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
         const anonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? ''
 
-        const supabase = createClient(supabaseUrl, serviceRoleKey)
-        const requester = await getRequester(req, supabaseUrl, anonKey, supabase)
-        if (!requester.isAdmin && payload.targetRole !== 'admin') {
+        const adminClient = createClient(supabaseUrl, serviceRoleKey)
+        supabase = adminClient
+        requester = await getRequester(req, supabaseUrl, anonKey, adminClient)
+        const resolvedPayload = await resolveNotificationPayload(notificationPayload, requester, adminClient)
+        payload = resolvedPayload
+        shouldWriteNotificationLog = true
+
+        if (!requester.isAdmin && resolvedPayload.targetRole !== 'admin') {
             return new Response(JSON.stringify({ error: "Only admins can send student broadcasts." }), {
                 headers: { ...corsHeaders, 'Content-Type': 'application/json' },
                 status: 403,
@@ -74,19 +100,17 @@ serve(async (req: Request) => {
         let tokens: string[] = [];
 
         // Determine targets
-        if (payload.targetRole) {
-            console.log(`Fetching tokens for role: ${payload.targetRole}...`);
-            const { data, error } = await supabase
+        if (resolvedPayload.targetRole) {
+            const { data, error } = await adminClient
                 .from('profiles')
                 .select('fcm_token')
-                .eq('role', payload.targetRole)
+                .eq('role', resolvedPayload.targetRole)
                 .not('fcm_token', 'is', null);
 
             if (error) throw error;
             tokens = data.map((p: any) => p.fcm_token).filter((t: string | null) => !!t);
-        } else if (payload.topic === "all_students") {
-            console.log("Fetching all student tokens...");
-            const { data, error } = await supabase
+        } else if (resolvedPayload.topic === "all_students") {
+            const { data, error } = await adminClient
                 .from('profiles')
                 .select('fcm_token')
                 .eq('role', 'student')
@@ -94,49 +118,57 @@ serve(async (req: Request) => {
 
             if (error) throw error;
             tokens = data.map((p: any) => p.fcm_token).filter((t: string | null) => !!t);
-        } else if (payload.userIds && payload.userIds.length > 0) {
-            console.log(`Fetching tokens for ${payload.userIds.length} users...`);
-            const { data, error } = await supabase
+        } else if (resolvedPayload.userIds && resolvedPayload.userIds.length > 0) {
+            const { data, error } = await adminClient
                 .from('profiles')
                 .select('fcm_token')
-                .in('id', payload.userIds)
+                .in('id', resolvedPayload.userIds)
                 .not('fcm_token', 'is', null);
 
             if (error) throw error;
             tokens = data.map((p: any) => p.fcm_token).filter((t: string | null) => !!t);
         }
 
-        console.log(`Sending to ${tokens.length} total tokens...`);
+        counts.sentCount = tokens.length
 
-        // Send to each token
-        const results = [];
+        // Send to each token. Do not return or log device tokens.
         for (const token of tokens) {
             try {
                 const res = await sendToFcm(projectID, accessToken, {
                     message: {
                         token: token,
                         notification: {
-                            title: payload.title,
-                            body: payload.body,
-                            ...(payload.image ? { image: payload.image } : {})
+                            title: resolvedPayload.title,
+                            body: resolvedPayload.body,
+                            ...(resolvedPayload.image ? { image: resolvedPayload.image } : {})
                         },
                     }
                 });
-                results.push({ token, status: res.error ? 'error' : 'success', details: res });
+                const status = res.error ? 'error' : 'success'
+                if (status === 'success') {
+                    counts.successCount++
+                } else {
+                    counts.errorCount++
+                }
             } catch (e: any) {
-                results.push({ token, status: 'error', error: e?.message || "Unknown error" });
+                counts.errorCount++
             }
         }
 
-        console.log("--- Success ---");
-        return new Response(JSON.stringify({ success: true, count: tokens.length, results }), {
+        await writeNotificationLog()
+        return new Response(JSON.stringify({ success: true, count: tokens.length, ...counts }), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             status: 200,
         })
 
     } catch (error: any) {
-        console.error("Edge Function Error:", error.message);
-        return new Response(JSON.stringify({ error: error.message }), {
+        if (requester && payload && counts.sentCount === 0 && counts.errorCount === 0) {
+            counts.errorCount = 1
+        }
+        await writeNotificationLog()
+        const message = error?.message || "Unknown error"
+        console.error("Edge Function Error:", message);
+        return new Response(JSON.stringify({ error: message }), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             status: 400,
         })
@@ -177,6 +209,116 @@ async function getRequester(
         id: user.id,
         role,
         isAdmin: role === 'admin' || role === 'developer',
+    }
+}
+
+async function resolveNotificationPayload(
+    payload: NotificationPayload,
+    requester: Requester,
+    adminClient: ReturnType<typeof createClient>,
+): Promise<NotificationPayload> {
+    if (requester.isAdmin) {
+        if (!payload.title?.trim() || !payload.body?.trim()) {
+            throw new Error("Notification title and body are required.")
+        }
+        return payload
+    }
+
+    if (payload.targetRole !== 'admin') {
+        throw new Error("Only admins can send student broadcasts.")
+    }
+
+    if (payload.eventType === 'student_signup') {
+        const { data: profile, error } = await adminClient
+            .from('profiles')
+            .select('name')
+            .eq('id', requester.id)
+            .eq('role', 'student')
+            .single()
+
+        if (error || !profile) throw new Error("Signup profile not found.")
+
+        return {
+            title: "New Student Signup!",
+            body: `${profile.name || "A student"} has requested to join. Please review for approval.`,
+            targetRole: 'admin',
+        }
+    }
+
+    if (payload.eventType === 'payment_submitted') {
+        const paymentId = Number(payload.resourceId)
+        if (!Number.isFinite(paymentId)) throw new Error("Valid payment id is required.")
+
+        const { data: payment, error } = await adminClient
+            .from('payments')
+            .select('amount, plan_name, screenshot_url, profiles:user_id(name)')
+            .eq('id', paymentId)
+            .eq('user_id', requester.id)
+            .single()
+
+        if (error || !payment) throw new Error("Payment submission not found.")
+
+        const profile = Array.isArray(payment.profiles) ? payment.profiles[0] : payment.profiles
+        return {
+            title: "New Payment Submitted!",
+            body: `${profile?.name || "A student"} paid ₹${payment.amount} for ${payment.plan_name}. Please verify receipt.`,
+            image: payment.screenshot_url || undefined,
+            targetRole: 'admin',
+        }
+    }
+
+    if (payload.eventType === 'leave_request') {
+        const requestId = Number(payload.resourceId)
+        if (!Number.isFinite(requestId)) throw new Error("Valid leave request id is required.")
+
+        const { data: request, error } = await adminClient
+            .from('leave_requests')
+            .select('start_date, reason, profiles:user_id(name)')
+            .eq('id', requestId)
+            .eq('user_id', requester.id)
+            .single()
+
+        if (error || !request) throw new Error("Leave request not found.")
+
+        const profile = Array.isArray(request.profiles) ? request.profiles[0] : request.profiles
+        const isReturn = String(request.reason || "").startsWith("[RETURN]")
+        return {
+            title: `New ${isReturn ? "RETURN" : "LEAVE"} Request`,
+            body: `${profile?.name || "A student"} submitted a ${isReturn ? "return" : "leave"} request for ${request.start_date}.`,
+            targetRole: 'admin',
+        }
+    }
+
+    throw new Error("Unsupported admin notification event.")
+}
+
+async function insertNotificationLog(
+    adminClient: ReturnType<typeof createClient>,
+    senderId: string,
+    payload: NotificationPayload,
+    counts: SendCounts,
+) {
+    try {
+        const { error } = await adminClient
+            .from('notification_logs')
+            .insert({
+                sender_id: senderId,
+                title: payload.title ?? '',
+                body: payload.body ?? '',
+                image: payload.image ?? null,
+                target_role: payload.targetRole ?? null,
+                topic: payload.topic ?? null,
+                user_ids: payload.userIds ?? [],
+                sent_count: counts.sentCount,
+                success_count: counts.successCount,
+                error_count: counts.errorCount,
+            })
+
+        if (error) {
+            console.error("Notification log insert failed:", error.message)
+        }
+    } catch (error) {
+        console.error("Notification log insert failed:", error instanceof Error ? error.message : "Unknown error")
     }
 }
 

@@ -2,6 +2,7 @@ import { motion, useMotionValue, useTransform, useAnimation, PanInfo } from "fra
 import { Check, X, ExternalLink, User } from "lucide-react";
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
+import { calculatePlanEndDate } from "@/lib/plans";
 
 interface PaymentSwipeCardProps {
     payment: any;
@@ -90,7 +91,7 @@ export const PaymentSwipeCard = ({ payment, onSwipe, onImageClick, className, st
                             </div>
                         </>
                     ) : (
-                        <div className="w-full h-full flex items-center justify-center bg-gray-100 dark:bg-zinc-800 text-muted-foreground">
+                        <div className="w-full h-full flex items-center justify-center bg-muted text-muted-foreground">
                             <span className="text-sm italic">No screenshot provided</span>
                         </div>
                     )}
@@ -143,10 +144,7 @@ export const PaymentSwipeCard = ({ payment, onSwipe, onImageClick, className, st
                                             if (!startStr) return "N/A";
                                             const start = new Date(startStr);
                                             if (isNaN(start.getTime())) return "Invalid Date";
-                                            const end = new Date(start);
-                                            const isMonthly = payment.plan_name?.toLowerCase().includes('monthly');
-                                            if (isMonthly) end.setMonth(end.getMonth() + 1);
-                                            else end.setDate(end.getDate() + 1);
+                                            const end = calculatePlanEndDate(start, payment.plan_name) ?? new Date(start);
                                             const fmt = (d: Date) => d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
                                             return `${fmt(start)} - ${fmt(end)}`;
                                         } catch (e) { return "Date Error"; }

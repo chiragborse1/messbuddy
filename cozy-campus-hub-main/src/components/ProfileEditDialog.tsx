@@ -16,6 +16,7 @@ import { useToast } from "@/hooks/use-toast";
 import { UserData } from "@/contexts/user";
 import { useUser } from "@/hooks/useUser";
 import { supabase } from "@/lib/supabase";
+import { validateImageFile } from "@/lib/uploads";
 
 type EditableField = "name" | "mobile" | "college" | "course";
 
@@ -75,26 +76,18 @@ const ProfileEditDialog = ({ children, fields }: ProfileEditDialogProps) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    if (!file.type.startsWith("image/")) {
+    const validation = validateImageFile(file, { maxSizeMB: 5 });
+    if (validation.ok === false) {
       toast({
         title: "Invalid image",
-        description: "Please choose a valid profile photo.",
+        description: validation.error,
         variant: "destructive",
       });
       return;
     }
 
-    if (file.size > 5 * 1024 * 1024) {
-      toast({
-        title: "Image too large",
-        description: "Please choose an image under 5 MB.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setSelectedFile(file);
-    setPhotoPreview(URL.createObjectURL(file));
+    setSelectedFile(validation.file);
+    setPhotoPreview(URL.createObjectURL(validation.file));
   };
 
   const uploadPhoto = async (userId: string, file: File) => {

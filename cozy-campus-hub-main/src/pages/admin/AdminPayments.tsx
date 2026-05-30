@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import PageShell from "@/components/PageShell";
 import AdminBottomNav from "@/components/AdminBottomNav";
 import StatusBadge from "@/components/StatusBadge";
+import ConfirmActionDialog from "@/components/ConfirmActionDialog";
 import { Button } from "@/components/ui/button";
 import { Check, X, Loader2, ExternalLink, Image as ImageIcon, RotateCcw, Trash2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
@@ -9,12 +10,19 @@ import { toast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PaymentSwipeCard } from "@/components/PaymentSwipeCard"; // Ensure this path is correct
 import { AnimatePresence, motion } from "framer-motion";
+import { calculatePaymentPlanUpdate, calculatePaymentRevokeUpdate } from "@/lib/plans";
+
+type PaymentConfirmAction =
+  | { type: "revoke"; paymentId: number; planName?: string }
+  | { type: "delete"; paymentId: number; planName?: string };
 
 const AdminPayments = () => {
   const [payments, setPayments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("pending");
   const [zoomedImage, setZoomedImage] = useState<string | null>(null);
+  const [confirmAction, setConfirmAction] = useState<PaymentConfirmAction | null>(null);
+  const [confirmLoading, setConfirmLoading] = useState(false);
 
   const fetchPayments = async (isBackground = false) => {
     if (!isBackground) setLoading(true);
@@ -22,7 +30,15 @@ const AdminPayments = () => {
       const { data, error } = await supabase
         .from('payments')
         .select(`
-                    *,
+                    id,
+                    user_id,
+                    amount,
+                    plan_name,
+                    screenshot_url,
+                    membership_start_date,
+                    transaction_id,
+                    status,
+                    created_at,
                     profiles (
                         name,
                         college,
@@ -80,27 +96,6 @@ const AdminPayments = () => {
       if (status === 'approved') {
         const payment = payments.find(p => p.id === id);
         if (payment && payment.user_id) {
-          const isMonthly = payment.plan_name.includes("Monthly");
-          const isPartial = payment.plan_name.includes("(Partial)");
-
-          // Map plan names to full prices
-          const planPrices: Record<string, number> = {
-            "Boys Monthly Mess": 1300,
-            "Girls Monthly Mess": 1000,
-            "Boys Monthly Mess (1 Time)": 1300,
-            "Girls Monthly Mess (1 Time)": 1000,
-            "Boys Monthly Mess (2 Times)": 2200,
-            "Girls Monthly Mess (2 Times)": 1600,
-            "Boys 1 Day Mess": 120,
-            "Girls 1 Day Mess": 80,
-            "Boys 1 Time Mess": 80,
-            "Girls 1 Time Mess": 40
-          };
-
-          // Get full expected price (strip "(Partial)" if present)
-          const basePlanName = payment.plan_name.replace(" (Partial)", "");
-          const fullPrice = planPrices[basePlanName] || payment.amount;
-
           // Fetch current profile
           const { data: profile } = await supabase
             .from('profiles')
@@ -108,35 +103,9 @@ const AdminPayments = () => {
             .eq('id', payment.user_id)
             .single();
 
-          let startDate = new Date();
-          if (payment.membership_start_date) {
-            startDate = new Date(payment.membership_start_date);
-          } else if (profile?.plan_end_date && new Date(profile.plan_end_date) > new Date()) {
-            startDate = new Date(profile.plan_end_date);
-          }
+          const update = calculatePaymentPlanUpdate({ payment, profile });
 
-          let newEndDate = new Date(startDate);
-          if (isMonthly) {
-            const daysInMonth = new Date(startDate.getFullYear(), startDate.getMonth() + 1, 0).getDate();
-            newEndDate.setDate(startDate.getDate() + daysInMonth);
-          } else if (payment.plan_name.includes("Day") || payment.plan_name.includes("Time")) {
-            newEndDate.setDate(startDate.getDate() + 1);
-          } else {
-            // If it's just a balance payment (no plan name match), keep the current end date
-            newEndDate = profile?.plan_end_date ? new Date(profile.plan_end_date) : new Date();
-          }
-
-          const existingDebt = Number(profile?.pending_amount || 0);
-          const expectedCharge = isPartial ? fullPrice : payment.amount;
-          const newPendingAmount = Math.max(0, existingDebt + expectedCharge - payment.amount);
-
-          await supabase.from('profiles').update({
-            plan: basePlanName,
-            plan_start_date: startDate.toISOString(),
-            plan_end_date: newEndDate.toISOString(),
-            status: 'active',
-            pending_amount: newPendingAmount
-          }).eq('id', payment.user_id);
+          await supabase.from('profiles').update(update).eq('id', payment.user_id);
         }
       }
 
@@ -166,8 +135,6 @@ const AdminPayments = () => {
   };
 
   const handleRevoke = async (paymentId: number) => {
-    if (!window.confirm("Are you sure? This will remove the days added by this payment.")) return;
-
     const previousPayments = [...payments];
     const payment = payments.find(p => p.id === paymentId);
     if (!payment) return;
@@ -176,34 +143,15 @@ const AdminPayments = () => {
     setPayments(payments.map(p => p.id === paymentId ? { ...p, status: 'rejected' } : p));
 
     try {
-      // 1. Revert days
-      const isMonthly = payment.plan_name.includes("Monthly");
-
       const { data: profile } = await supabase
         .from('profiles')
         .select('plan_end_date')
         .eq('id', payment.user_id)
         .single();
 
-      if (profile?.plan_end_date) {
-        const currentEndDate = new Date(profile.plan_end_date);
-
-        if (isMonthly) {
-          // Remove one month's worth of days (getMonth()+1 gives current month's day count)
-          const daysInMonth = new Date(
-            currentEndDate.getFullYear(),
-            currentEndDate.getMonth() + 1,
-            0
-          ).getDate();
-          currentEndDate.setDate(currentEndDate.getDate() - daysInMonth);
-        } else {
-          // Non-monthly plans: remove 1 day
-          currentEndDate.setDate(currentEndDate.getDate() - 1);
-        }
-
-        await supabase.from('profiles').update({
-          plan_end_date: currentEndDate.toISOString()
-        }).eq('id', payment.user_id);
+      const revokeUpdate = calculatePaymentRevokeUpdate({ payment, profile });
+      if (revokeUpdate) {
+        await supabase.from('profiles').update(revokeUpdate).eq('id', payment.user_id);
       }
 
       // 2. Update status to rejected
@@ -224,8 +172,6 @@ const AdminPayments = () => {
   };
 
   const handleDelete = async (paymentId: number) => {
-    if (!window.confirm("Delete this payment record? This does NOT revert days, only deletes history.")) return;
-
     try {
       const { error } = await supabase.from('payments').delete().eq('id', paymentId);
       if (error) throw error;
@@ -233,6 +179,30 @@ const AdminPayments = () => {
       toast({ title: "Record Deleted" });
     } catch (error: any) {
       toast({ title: "Delete Failed", description: error.message, variant: "destructive" });
+    }
+  };
+
+  const requestRevoke = (payment: any) => {
+    setConfirmAction({ type: "revoke", paymentId: payment.id, planName: payment.plan_name });
+  };
+
+  const requestDelete = (payment: any) => {
+    setConfirmAction({ type: "delete", paymentId: payment.id, planName: payment.plan_name });
+  };
+
+  const confirmPaymentAction = async () => {
+    if (!confirmAction) return;
+
+    setConfirmLoading(true);
+    try {
+      if (confirmAction.type === "revoke") {
+        await handleRevoke(confirmAction.paymentId);
+      } else {
+        await handleDelete(confirmAction.paymentId);
+      }
+      setConfirmAction(null);
+    } finally {
+      setConfirmLoading(false);
     }
   };
 
@@ -330,7 +300,7 @@ const AdminPayments = () => {
                 <p className="text-center py-10 text-muted-foreground w-full">No approved payments yet.</p>
               ) : (
                 approvedPayments.map(p => (
-                  <PaymentListItem key={p.id} payment={p} onDelete={handleDelete} onRevoke={handleRevoke} onImageClick={setZoomedImage} />
+                  <PaymentListItem key={p.id} payment={p} onDelete={requestDelete} onRevoke={requestRevoke} onImageClick={setZoomedImage} />
                 ))
               )}
             </div>
@@ -343,7 +313,7 @@ const AdminPayments = () => {
                 <p className="text-center py-10 text-muted-foreground w-full">No rejected payments yet.</p>
               ) : (
                 rejectedPayments.map(p => (
-                  <PaymentListItem key={p.id} payment={p} onDelete={handleDelete} showRevoke={false} onImageClick={setZoomedImage} />
+                  <PaymentListItem key={p.id} payment={p} onDelete={requestDelete} showRevoke={false} onImageClick={setZoomedImage} />
                 ))
               )}
             </div>
@@ -384,13 +354,29 @@ const AdminPayments = () => {
         )}
       </AnimatePresence>
 
+      <ConfirmActionDialog
+        open={!!confirmAction}
+        onOpenChange={(open) => {
+          if (!open && !confirmLoading) setConfirmAction(null);
+        }}
+        title={confirmAction?.type === "revoke" ? "Reject and revert payment?" : "Delete payment record?"}
+        description={
+          confirmAction?.type === "revoke"
+            ? `This will reject ${confirmAction.planName || "this payment"} and remove the plan days added by it.`
+            : `This deletes ${confirmAction?.planName || "this payment"} from history only. It does not change student plan days.`
+        }
+        confirmLabel={confirmAction?.type === "revoke" ? "Reject & Revert" : "Delete Record"}
+        loading={confirmLoading}
+        onConfirm={confirmPaymentAction}
+      />
+
       <AdminBottomNav />
     </>
   );
 };
 
 // Sub-component for List Items (Approved/Rejected) to keep code clean
-const PaymentListItem = ({ payment, onDelete, onRevoke, onImageClick, showRevoke = true }: { payment: any, onDelete: (id: number) => void, onRevoke?: (id: number) => void, onImageClick?: (url: string) => void, showRevoke?: boolean }) => (
+const PaymentListItem = ({ payment, onDelete, onRevoke, onImageClick, showRevoke = true }: { payment: any, onDelete: (payment: any) => void, onRevoke?: (payment: any) => void, onImageClick?: (url: string) => void, showRevoke?: boolean }) => (
   <div className="w-full bg-card rounded-xl border border-border/50 p-4 shadow-sm flex items-center justify-between">
     <div className="flex items-center gap-3 flex-1 min-w-0">
       {/* Profile Photo */}
@@ -428,7 +414,7 @@ const PaymentListItem = ({ payment, onDelete, onRevoke, onImageClick, showRevoke
           size="sm"
           variant="destructive"
           className="h-8 px-3 text-xs"
-          onClick={() => onRevoke(payment.id)}
+          onClick={() => onRevoke(payment)}
           title="Reject & Revert Days"
         >
           Reject
@@ -438,7 +424,7 @@ const PaymentListItem = ({ payment, onDelete, onRevoke, onImageClick, showRevoke
           size="icon"
           variant="ghost"
           className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
-          onClick={() => onDelete(payment.id)}
+          onClick={() => onDelete(payment)}
           title="Delete Record"
         >
           <Trash2 className="w-4 h-4" />

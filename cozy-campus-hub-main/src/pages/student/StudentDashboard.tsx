@@ -53,30 +53,19 @@ const StudentDashboard = () => {
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'menu_items' },
-        (payload) => {
-          console.log("Realtime table update observed:", payload);
-          refetch();
-        }
+        () => refetch()
       )
       .on(
         'broadcast',
         { event: 'mess_toggled' },
-        (payload) => {
-          console.log("Broadcast received: mess_toggled", payload);
-          refetch();
-        }
+        () => refetch()
       )
       .on(
         'broadcast',
         { event: 'meal_toggled' },
-        (payload) => {
-          console.log("Broadcast received: meal_toggled", payload);
-          refetch();
-        }
+        () => refetch()
       )
-      .subscribe((status) => {
-        console.log("Student Board Channel Status:", status);
-      });
+      .subscribe();
 
     return () => {
       supabase.removeChannel(channel);

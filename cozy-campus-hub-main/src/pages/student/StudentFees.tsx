@@ -9,17 +9,8 @@ import { useUser } from "@/hooks/useUser";
 import { toast } from "@/hooks/use-toast";
 import { MessReceiptTicket } from "@/components/ui/ticket-confirmation-card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-
-const plans = [
-  { id: 1, label: "Boys Monthly Mess (1 Time)", price: 1300, desc: "1 meal/day access for boys" },
-  { id: 2, label: "Girls Monthly Mess (1 Time)", price: 1000, desc: "1 meal/day access for girls" },
-  { id: 7, label: "Boys Monthly Mess (2 Times)", price: 2200, desc: "2 meals/day access for boys" },
-  { id: 8, label: "Girls Monthly Mess (2 Times)", price: 1600, desc: "2 meals/day access for girls" },
-  { id: 3, label: "Boys 1 Day Mess", price: 120, desc: "24-hour access for boys" },
-  { id: 4, label: "Girls 1 Day Mess", price: 80, desc: "24-hour access for girls" },
-  { id: 5, label: "Boys 1 Time Mess", price: 80, desc: "Single meal choice for boys" },
-  { id: 6, label: "Girls 1 Time Mess", price: 40, desc: "Single meal choice for girls" },
-];
+import { getPlanById, MESS_PLANS } from "@/lib/plans";
+import { validateImageFile } from "@/lib/uploads";
 
 const StudentFees = () => {
   const { user } = useUser();
@@ -38,7 +29,7 @@ const StudentFees = () => {
 
     const { data } = await supabase
       .from('payments')
-      .select('*')
+      .select('id, amount, plan_name, screenshot_url, membership_start_date, status, created_at')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false });
     if (data) setMyPayments(data);
@@ -79,17 +70,38 @@ const StudentFees = () => {
     }
 
     const file = e.target.files[0];
-    const plan = plans.find(p => p.id === selectedPlanId);
+    const validation = validateImageFile(file, { maxSizeMB: 5 });
+    if (validation.ok === false) {
+      toast({ title: "Invalid receipt image", description: validation.error, variant: "destructive" });
+      e.target.value = '';
+      return;
+    }
+
+    const plan = getPlanById(selectedPlanId);
     if (!plan) return;
+
+    const partialPaymentAmount = Number(partialAmount);
+    if (
+      isPartialPayment &&
+      (!Number.isFinite(partialPaymentAmount) || partialPaymentAmount <= 0 || partialPaymentAmount >= plan.price)
+    ) {
+      toast({
+        title: "Invalid installment amount",
+        description: `Enter an amount between ₹1 and ₹${plan.price - 1}.`,
+        variant: "destructive",
+      });
+      e.target.value = '';
+      return;
+    }
 
     setUploading(true);
     try {
       // 1. Upload Image
-      const fileExt = file.name.split('.').pop();
+      const fileExt = validation.file.name.split('.').pop();
       const fileName = `${user.id}/${Date.now()}.${fileExt}`;
-      const { error: uploadError, data: uploadData } = await supabase.storage
+      const { error: uploadError } = await supabase.storage
         .from('payment_receipts')
-        .upload(fileName, file);
+        .upload(fileName, validation.file);
 
       if (uploadError) throw uploadError;
 
@@ -99,27 +111,26 @@ const StudentFees = () => {
         .getPublicUrl(fileName);
 
       // 3. Insert Record
-      const finalAmount = isPartialPayment ? Number(partialAmount) : plan.price;
+      const finalAmount = isPartialPayment ? partialPaymentAmount : plan.price;
       const planLabel = isPartialPayment ? `${plan.label} (Partial)` : plan.label;
 
-      const { error: insertError } = await supabase.from('payments').insert({
+      const { data: paymentRecord, error: insertError } = await supabase.from('payments').insert({
         user_id: user.id,
         amount: finalAmount,
         plan_name: planLabel,
         screenshot_url: publicUrl,
         membership_start_date: startDate,
         status: 'pending'
-      });
+      }).select('id').single();
 
       if (insertError) throw insertError;
 
       // Notify Admins of new payment
       supabase.functions.invoke('send-notification', {
         body: {
-          title: "💰 New Payment Submitted!",
-          body: `${user.name} paid ₹${finalAmount} for ${planLabel}. Please verify receipt.`,
+          eventType: 'payment_submitted',
+          resourceId: paymentRecord?.id,
           targetRole: 'admin',
-          image: publicUrl // Include the receipt screenshot in the admin notification!
         }
       });
 
@@ -253,7 +264,7 @@ const StudentFees = () => {
                       </TabsList>
 
                       <TabsContent value="boys" className="space-y-3 mt-0">
-                        {plans.filter(p => p.label.startsWith("Boys")).map((plan) => (
+                        {MESS_PLANS.filter(p => p.audience === "boys").map((plan) => (
                           <button
                             key={plan.id}
                             onClick={() => {
@@ -268,7 +279,7 @@ const StudentFees = () => {
                             <div className="flex items-center justify-between relative z-10">
                               <div>
                                 <p className="font-semibold text-foreground">{plan.label.replace("Boys ", "")}</p>
-                                <p className="text-xs text-muted-foreground">{plan.desc}</p>
+                                <p className="text-xs text-muted-foreground">{plan.description}</p>
                               </div>
                               <span className="text-lg font-bold text-primary">₹{plan.price}</span>
                             </div>
@@ -277,7 +288,7 @@ const StudentFees = () => {
                       </TabsContent>
 
                       <TabsContent value="girls" className="space-y-3 mt-0">
-                        {plans.filter(p => p.label.startsWith("Girls")).map((plan) => (
+                        {MESS_PLANS.filter(p => p.audience === "girls").map((plan) => (
                           <button
                             key={plan.id}
                             onClick={() => {
@@ -292,7 +303,7 @@ const StudentFees = () => {
                             <div className="flex items-center justify-between relative z-10">
                               <div>
                                 <p className="font-semibold text-foreground">{plan.label.replace("Girls ", "")}</p>
-                                <p className="text-xs text-muted-foreground">{plan.desc}</p>
+                                <p className="text-xs text-muted-foreground">{plan.description}</p>
                               </div>
                               <span className="text-lg font-bold text-pink-600">₹{plan.price}</span>
                             </div>
@@ -369,6 +380,9 @@ const StudentFees = () => {
                               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-bold">₹</span>
                               <input
                                 type="number"
+                                min={1}
+                                max={Math.max(1, (getPlanById(selectedPlanId)?.price || 1) - 1)}
+                                step={1}
                                 placeholder="Amount paying now"
                                 value={partialAmount}
                                 onChange={(e) => setPartialAmount(e.target.value)}
@@ -404,8 +418,10 @@ const StudentFees = () => {
 
                       {/* Pay via App Buttons */}
                       {(() => {
-                        const plan = plans.find(p => p.id === selectedPlanId);
-                        const displayPrice = isPartialPayment ? (Number(partialAmount) || 0) : (plan?.price || 0);
+                        const plan = getPlanById(selectedPlanId);
+                        const partialValue = Number(partialAmount);
+                        const hasValidPartialAmount = Number.isFinite(partialValue) && partialValue > 0 && !!plan && partialValue < plan.price;
+                        const displayPrice = isPartialPayment ? (hasValidPartialAmount ? partialValue : 0) : (plan?.price || 0);
                         const upiParams = `pa=9359447581@ibl&pn=Akshay+Anil+Patil&am=${displayPrice}&cu=INR&tn=${encodeURIComponent(plan?.label ?? 'Mess Plan')}`;
                         const upiApps = [
                           {
@@ -465,7 +481,7 @@ const StudentFees = () => {
                         return (
                           <div className="mb-4">
                             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 text-center">
-                              Or open app directly — ₹{plan?.price} auto-filled
+                              Or open app directly — ₹{displayPrice} auto-filled
                             </p>
                             <div className="grid grid-cols-4 gap-2">
                               {upiApps.map((app) => (

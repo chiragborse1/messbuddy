@@ -26,6 +26,19 @@ type DashboardData = {
 
 let cachedDashboardData: DashboardData | null = null;
 
+const broadcastStatusChange = async (event: "mess_toggled" | "meal_toggled", payload: Record<string, boolean>) => {
+  const channel = supabase.channel(`mess_status_updates_${event}_${Date.now()}`);
+  channel.subscribe(async (status) => {
+    if (status !== "SUBSCRIBED") return;
+
+    try {
+      await channel.send({ type: "broadcast", event, payload });
+    } finally {
+      supabase.removeChannel(channel);
+    }
+  });
+};
+
 const AdminDashboard = () => {
   const { user, loading: authLoading } = useUser();
   const navigate = useNavigate();
@@ -76,25 +89,25 @@ const AdminDashboard = () => {
             .maybeSingle(),
           supabase
             .from('profiles')
-            .select('*', { count: 'exact', head: true })
+            .select('id', { count: 'exact', head: true })
             .eq('role', 'student'),
           supabase
             .from('profiles')
-            .select('*', { count: 'exact', head: true })
+            .select('id', { count: 'exact', head: true })
             .eq('role', 'student')
             .gt('plan_end_date', today),
           supabase
             .from('profiles')
-            .select('*', { count: 'exact', head: true })
+            .select('id', { count: 'exact', head: true })
             .eq('role', 'student')
             .eq('status', 'pending'),
           supabase
             .from('menu_items')
-            .select('*', { count: 'exact', head: true })
+            .select('id', { count: 'exact', head: true })
             .neq('category', 'config'),
           supabase
             .from('leave_requests')
-            .select('*', { count: 'exact', head: true })
+            .select('id', { count: 'exact', head: true })
             .eq('status', 'pending'),
           supabase
             .from('payments')
@@ -196,16 +209,7 @@ const AdminDashboard = () => {
       });
 
       // Send a custom broadcast event to force update immediately
-      const channel = supabase.channel('mess_status_updates');
-      channel.subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
-          channel.send({
-            type: 'broadcast',
-            event: 'mess_toggled',
-            payload: { messOpen: newStatus }
-          });
-        }
-      });
+      void broadcastStatusChange('mess_toggled', { messOpen: newStatus });
 
       toast({
         title: newStatus ? "Mess Opened" : "Mess Closed",
@@ -291,16 +295,7 @@ const AdminDashboard = () => {
       }
 
       // Broadcast meal status change
-      const channel = supabase.channel('mess_status_updates');
-      channel.subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
-          channel.send({
-            type: 'broadcast',
-            event: 'meal_toggled',
-            payload: { mealReady: newStatus }
-          });
-        }
-      });
+      void broadcastStatusChange('meal_toggled', { mealReady: newStatus });
 
       toast({ title: newStatus ? "Meal marked as Ready" : "Meal marked as Preparing" });
     }

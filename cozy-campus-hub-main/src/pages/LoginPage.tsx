@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { supabase, getProfile } from "@/lib/supabase";
+import { getBlockedStudentStatusMessage, hasActiveStudentAccess, hasAdminAccess } from "@/lib/access";
 
 const LoginPage = () => {
   const navigate = useNavigate();
@@ -14,9 +15,9 @@ const LoginPage = () => {
 
   useEffect(() => {
     if (!authLoading && user) {
-      if (user.role === 'admin' || user.role === 'developer') {
+      if (hasAdminAccess(user)) {
         navigate('/admin', { replace: true });
-      } else if (user.role === 'student' && user.status !== 'pending') {
+      } else if (hasActiveStudentAccess(user)) {
         navigate('/student', { replace: true });
       }
     }
@@ -65,30 +66,23 @@ const LoginPage = () => {
           throw new Error("Access Denied: You are an Admin/Developer. Please use the Admin tab.");
         }
 
-        if (profile.role === "admin" || profile.role === "developer") {
+        if (hasAdminAccess(profile)) {
           navigate("/admin");
         } else {
           // Check student status
-          if (profile.status === "pending") {
+          const blockedStatus = getBlockedStudentStatusMessage(profile.status);
+          if (blockedStatus) {
             await supabase.auth.signOut();
             toast({
-              title: "Account Pending",
-              description: "Your account is awaiting admin approval.",
+              title: blockedStatus.title,
+              description: blockedStatus.description,
               variant: "destructive",
             });
-            return; // Stop execution — don't navigate anywhere
-          } else if (profile.status === "rejected" || profile.status === "suspended") {
-            await supabase.auth.signOut();
-            toast({
-              title: profile.status === "suspended" ? "Account Suspended" : "Account Rejected",
-              description: "Try contacting admin",
-              variant: "destructive",
-            });
-            return; // Stop execution
-          } else {
-            // Active/Approved
-            navigate("/student");
+            return;
           }
+
+          // Active/Approved/Expired students are allowed to enter the app.
+          navigate("/student");
         }
       }
     } catch (error: any) {

@@ -8,8 +8,8 @@ const statusStyles: Record<string, string> = {
   pending: "status-pending",
   expired: "status-expired",
   rejected: "status-expired",
-  suspended: "bg-red-100 text-red-700 border border-red-200",
-  deleted: "bg-gray-200 text-gray-700 border border-gray-300",
+  suspended: "bg-destructive/10 text-destructive border border-destructive/20",
+  deleted: "bg-muted text-muted-foreground border border-border",
   "on-leave": "bg-primary/10 text-primary",
 };
 

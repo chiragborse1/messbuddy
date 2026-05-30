@@ -32,7 +32,7 @@ const StudentLeave = () => {
     if (!user?.id) return;
     const { data } = await supabase
       .from('leave_requests')
-      .select('*')
+      .select('id, user_id, start_date, end_date, reason, status, created_at')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false });
 
@@ -74,21 +74,21 @@ const StudentLeave = () => {
       const typeLabel = tab === "leave" ? "LEAVE" : "RETURN";
       const finalReason = `[${typeLabel}] ${reason}`;
 
-      const { error } = await supabase.from('leave_requests').insert({
+      const { data: requestRecord, error } = await supabase.from('leave_requests').insert({
         user_id: user.id,
         start_date: dateString,
         end_date: dateString, // Same day for single event record
         reason: finalReason,
         status: 'pending'
-      });
+      }).select('id').single();
 
       if (error) throw error;
 
       // Notify Admins of new leave request
       supabase.functions.invoke('send-notification', {
         body: {
-          title: `📌 New ${tab.toUpperCase()} Request`,
-          body: `${user.name} has submitted a ${tab} request for ${dateString}.`,
+          eventType: 'leave_request',
+          resourceId: requestRecord?.id,
           targetRole: 'admin'
         }
       });

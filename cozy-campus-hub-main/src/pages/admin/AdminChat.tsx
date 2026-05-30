@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import PageShell from "@/components/PageShell";
 import AdminBottomNav from "@/components/AdminBottomNav";
+import ConfirmActionDialog from "@/components/ConfirmActionDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useUser } from "@/hooks/useUser";
@@ -9,6 +10,7 @@ import { Send, User as UserIcon, Image as ImageIcon, X, Download, Reply, Trash2,
 import { useNavigate } from "react-router-dom";
 import SwipeableMessage from "@/components/SwipeableMessage";
 import { toast } from "@/hooks/use-toast";
+import { validateImageFile } from "@/lib/uploads";
 
 interface Message {
     id: string;
@@ -56,6 +58,8 @@ const AdminChat = () => {
     const [isUploading, setIsUploading] = useState(false);
     const [previewImage, setPreviewImage] = useState<string | null>(null);
     const [replyingTo, setReplyingTo] = useState<Message | null>(null);
+    const [clearDialogOpen, setClearDialogOpen] = useState(false);
+    const [clearLoading, setClearLoading] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -177,8 +181,7 @@ const AdminChat = () => {
     }, [user]);
 
     const handleClearChat = async () => {
-        if (!window.confirm("Are you sure you want to clear the ENTIRE chat history? This cannot be undone.")) return;
-
+        setClearLoading(true);
         // Delete all messages. We use a filter like created_at > 1970 to match all rows
         // because supabase client usually requires a filter for delete operations.
         const { error } = await supabase
@@ -190,8 +193,10 @@ const AdminChat = () => {
             toast({ title: "Failed to clear chat", description: error.message, variant: "destructive" });
         } else {
             setMessages([]);
+            setClearDialogOpen(false);
             toast({ title: "Chat History Cleared" });
         }
+        setClearLoading(false);
     };
 
     if (loading) {
@@ -210,11 +215,15 @@ const AdminChat = () => {
     const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
             const file = e.target.files[0];
-            if (file.type.startsWith('image/')) {
-                setSelectedFile(file);
-            } else {
-                alert('Please select an image file');
+            const validation = validateImageFile(file, { maxSizeMB: 5 });
+
+            if (validation.ok === false) {
+                toast({ title: "Invalid image", description: validation.error, variant: "destructive" });
+                e.target.value = "";
+                return;
             }
+
+            setSelectedFile(validation.file);
         }
     };
 
@@ -269,7 +278,7 @@ const AdminChat = () => {
             }
         } catch (error) {
             console.error("Error in send message flow:", error);
-            alert("Failed to send message. Please try again.");
+            toast({ title: "Failed to send message", description: "Please try again.", variant: "destructive" });
         } finally {
             setIsUploading(false);
         }
@@ -289,7 +298,7 @@ const AdminChat = () => {
                         variant="destructive"
                         size="sm"
                         className="h-8 w-8 p-0 rounded-full"
-                        onClick={handleClearChat}
+                        onClick={() => setClearDialogOpen(true)}
                         title="Clear Chat History"
                     >
                         <Trash2 className="w-4 h-4 text-white" />
@@ -497,6 +506,17 @@ const AdminChat = () => {
                 )}
             </PageShell>
             <AdminBottomNav />
+            <ConfirmActionDialog
+                open={clearDialogOpen}
+                onOpenChange={(open) => {
+                    if (!open && !clearLoading) setClearDialogOpen(false);
+                }}
+                title="Clear entire chat?"
+                description="This deletes every community chat message for all users. This cannot be undone."
+                confirmLabel="Clear Chat"
+                loading={clearLoading}
+                onConfirm={handleClearChat}
+            />
         </>
     );
 };

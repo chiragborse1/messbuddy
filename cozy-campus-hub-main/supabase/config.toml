@@ -18,8 +18,8 @@ enabled = true
 
 [auth]
 enabled = true
-site_url = "http://localhost:5173"
-additional_redirect_urls = ["http://localhost:5173/auth/callback"]
+site_url = "http://127.0.0.1:8080"
+additional_redirect_urls = ["http://127.0.0.1:8080/auth/callback", "http://localhost:8080/auth/callback", "http://localhost:5173/auth/callback"]
 jwt_expiry = 3600
 enable_signup = true
 
@@ -27,4 +27,7 @@ enable_signup = true
 verify_jwt = true
 
 [functions.send-notification]
+verify_jwt = true
+
+[functions.delete-student]
 verify_jwt = true

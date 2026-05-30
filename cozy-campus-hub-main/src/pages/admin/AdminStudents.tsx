@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import PageShell from "@/components/PageShell";
 import AdminBottomNav from "@/components/AdminBottomNav";
 import StatusBadge from "@/components/StatusBadge";
+import ConfirmActionDialog from "@/components/ConfirmActionDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -19,8 +20,13 @@ import {
 } from "@/components/ui/drawer";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/supabase";
+import { calculatePlanEndDate, MESS_PLANS } from "@/lib/plans";
 
 const tabs = ["All", "Members", "Non-Members", "Pending", "Approved", "Suspended", "Rejected", "Deleted"];
+
+type StudentConfirmAction =
+  | { type: "trash"; studentId: string; studentName?: string }
+  | { type: "permanent"; studentId: string; studentName?: string };
 
 // Helper to format date to DD/MM/YYYY (Indian Standard)
 const formatDate = (dateString: string) => {
@@ -33,6 +39,22 @@ const formatDate = (dateString: string) => {
   });
 };
 
+const getFunctionErrorMessage = async (error: any) => {
+  if (!error) return "Request failed.";
+
+  try {
+    const context = error.context;
+    if (context && typeof context.json === "function") {
+      const body = await context.json();
+      if (body?.error) return body.error;
+    }
+  } catch {
+    // Fall back to the client error message below.
+  }
+
+  return error.message || "Request failed.";
+};
+
 const AdminStudents = () => {
   const [searchParams] = useSearchParams();
   const initialTab = searchParams.get("tab");
@@ -40,6 +62,8 @@ const AdminStudents = () => {
   const [students, setStudents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [confirmAction, setConfirmAction] = useState<StudentConfirmAction | null>(null);
+  const [confirmLoading, setConfirmLoading] = useState(false);
 
   // Drawer State
   const [adjustingStudent, setAdjustingStudent] = useState<any>(null);
@@ -53,7 +77,7 @@ const AdminStudents = () => {
     try {
       const { data, error } = await supabase
         .from('profiles')
-        .select('*')
+        .select('id, name, email, mobile, college, course, photo_url, role, status, plan, plan_start_date, plan_end_date, pending_amount, requested_plan, requested_plan_start_date, requested_pending_amount, created_at')
         .eq('role', 'student')
         .order('created_at', { ascending: false });
 
@@ -153,14 +177,7 @@ const AdminStudents = () => {
       let planEndDate = null;
       if (hasRequest) {
         const startDate = new Date(student.requested_plan_start_date);
-        planEndDate = new Date(startDate);
-        const isMonthly = student.requested_plan.includes("Monthly");
-        if (isMonthly) {
-          const daysInMonth = new Date(startDate.getFullYear(), startDate.getMonth() + 1, 0).getDate();
-          planEndDate.setDate(startDate.getDate() + daysInMonth);
-        } else if (student.requested_plan.includes("Day") || student.requested_plan.includes("Time")) {
-          planEndDate.setDate(startDate.getDate() + 1);
-        }
+        planEndDate = calculatePlanEndDate(startDate, student.requested_plan);
       }
 
       const { error } = await supabase
@@ -248,31 +265,13 @@ const AdminStudents = () => {
   };
 
   const handlePermanentDelete = async (studentId: string) => {
-    if (!window.confirm("Confirm PERMANENT Deletion? This will remove all student data and their account. Cannot be undone.")) return;
-
     try {
-      // Step 1: Delete all related data first (child records)
-      await supabase.from('payments').delete().eq('user_id', studentId);
-      await supabase.from('leave_requests').delete().eq('user_id', studentId);
-      await supabase.from('votes').delete().eq('user_id', studentId);
+      const { error } = await supabase.functions.invoke('delete-student', {
+        body: { studentId },
+      });
 
-      // Step 2: Delete the profile row
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .delete()
-        .eq('id', studentId);
-
-      if (profileError) throw profileError;
-
-      // Step 3: Try RPC to delete auth user (requires 'delete_user_complete' SQL function)
-      const { error: rpcError } = await supabase.rpc('delete_user_complete', { target_user_id: studentId });
-
-      if (rpcError) {
-        // Step 4: Fallback — try Supabase admin delete (works if service_role key is available)
-        const { error: adminError } = await supabase.auth.admin.deleteUser(studentId);
-        if (adminError) {
-          console.warn("Auth user could not be deleted automatically:", adminError.message);
-        }
+      if (error) {
+        throw new Error(await getFunctionErrorMessage(error));
       }
 
       toast({ title: "Permanently Deleted", description: "All student data has been removed successfully." });
@@ -304,8 +303,6 @@ const AdminStudents = () => {
   };
 
   const handleDelete = async (studentId: string) => {
-    if (!window.confirm("Move student to Deleted Bin? Data will be preserved but they won't be able to login.")) return;
-
     try {
       const { error } = await supabase
         .from('profiles')
@@ -318,6 +315,30 @@ const AdminStudents = () => {
       loadStudents();
     } catch (error: any) {
       toast({ title: "Action failed", description: error.message, variant: "destructive" });
+    }
+  };
+
+  const requestDelete = (studentId: string, studentName?: string) => {
+    setConfirmAction({ type: "trash", studentId, studentName });
+  };
+
+  const requestPermanentDelete = (studentId: string, studentName?: string) => {
+    setConfirmAction({ type: "permanent", studentId, studentName });
+  };
+
+  const confirmStudentAction = async () => {
+    if (!confirmAction) return;
+
+    setConfirmLoading(true);
+    try {
+      if (confirmAction.type === "trash") {
+        await handleDelete(confirmAction.studentId);
+      } else {
+        await handlePermanentDelete(confirmAction.studentId);
+      }
+      setConfirmAction(null);
+    } finally {
+      setConfirmLoading(false);
     }
   };
 
@@ -567,7 +588,7 @@ const AdminStudents = () => {
                             </Button>
                             <Button
                               variant="destructive"
-                              onClick={(e) => { e.stopPropagation(); handlePermanentDelete(s.id); }}
+                              onClick={(e) => { e.stopPropagation(); requestPermanentDelete(s.id, s.name); }}
                               className="flex-1 shadow-sm h-9"
                             >
                               <X className="w-4 h-4 mr-2" />
@@ -596,7 +617,7 @@ const AdminStudents = () => {
                             )}
                             <Button
                               variant="outline"
-                              onClick={(e) => { e.stopPropagation(); handleDelete(s.id); }}
+                              onClick={(e) => { e.stopPropagation(); requestDelete(s.id, s.name); }}
                               className="flex-1 shadow-sm h-9 border-destructive/30 text-destructive hover:bg-destructive/10"
                             >
                               Move to Trash
@@ -634,14 +655,11 @@ const AdminStudents = () => {
                   onChange={(e) => setAdjustmentPlan(e.target.value)}
                 >
                   <option value="">No Plan</option>
-                  <option value="Boys Monthly Mess (1 Time)">Boys Monthly Mess (1 Time) (₹1300)</option>
-                  <option value="Girls Monthly Mess (1 Time)">Girls Monthly Mess (1 Time) (₹1000)</option>
-                  <option value="Boys Monthly Mess (2 Times)">Boys Monthly Mess (2 Times) (₹2200)</option>
-                  <option value="Girls Monthly Mess (2 Times)">Girls Monthly Mess (2 Times) (₹1600)</option>
-                  <option value="Boys 1 Day Mess">Boys 1 Day Mess (₹120)</option>
-                  <option value="Girls 1 Day Mess">Girls 1 Day Mess (₹80)</option>
-                  <option value="Boys 1 Time Mess">Boys 1 Time Mess (₹80)</option>
-                  <option value="Girls 1 Time Mess">Girls 1 Time Mess (₹40)</option>
+                  {MESS_PLANS.map((plan) => (
+                    <option key={plan.id} value={plan.label}>
+                      {plan.label} (₹{plan.price})
+                    </option>
+                  ))}
                 </select>
               </div>
 
@@ -717,6 +735,22 @@ const AdminStudents = () => {
           </div>
         </DrawerContent>
       </Drawer>
+
+      <ConfirmActionDialog
+        open={!!confirmAction}
+        onOpenChange={(open) => {
+          if (!open && !confirmLoading) setConfirmAction(null);
+        }}
+        title={confirmAction?.type === "permanent" ? "Delete student permanently?" : "Move student to trash?"}
+        description={
+          confirmAction?.type === "permanent"
+            ? `${confirmAction.studentName || "This student"} and all related account data will be removed. This cannot be undone.`
+            : `${confirmAction?.studentName || "This student"} will be moved to the Deleted tab and blocked from login. Their data stays available for restore.`
+        }
+        confirmLabel={confirmAction?.type === "permanent" ? "Delete Permanently" : "Move to Trash"}
+        loading={confirmLoading}
+        onConfirm={confirmStudentAction}
+      />
     </>
   );
 };

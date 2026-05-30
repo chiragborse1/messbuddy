@@ -1,13 +1,19 @@
 
-import { useState, useEffect } from "react";
+import { useCallback, useState, useEffect } from "react";
 import PageShell from "@/components/PageShell";
 import AdminBottomNav from "@/components/AdminBottomNav";
 import { supabase } from "@/lib/supabase";
 import { IndianRupee, Calendar, TrendingUp, DollarSign } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
+interface RevenueSummary {
+    total_revenue: number | string | null;
+    monthly_revenue: number | string | null;
+    weekly_revenue: number | string | null;
+    daily_revenue: number | string | null;
+}
+
 const AdminAnalytics = () => {
-    const [payments, setPayments] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
 
     // Stats
@@ -21,77 +27,45 @@ const AdminAnalytics = () => {
     const [endDate, setEndDate] = useState("");
     const [customRevenue, setCustomRevenue] = useState<number | null>(null);
 
-    const fetchPayments = async () => {
+    const fetchRevenueSummary = useCallback(async () => {
         try {
             const { data, error } = await supabase
-                .from('payments')
-                .select('*')
-                .eq('status', 'approved'); // Only approved payments count
+                .rpc('admin_revenue_summary')
+                .single();
 
             if (error) throw error;
             if (data) {
-                setPayments(data);
-                calculateStats(data);
+                const summary = data as RevenueSummary;
+                setTotalRevenue(Number(summary.total_revenue) || 0);
+                setMonthlyRevenue(Number(summary.monthly_revenue) || 0);
+                setWeeklyRevenue(Number(summary.weekly_revenue) || 0);
+                setDailyRevenue(Number(summary.daily_revenue) || 0);
             }
         } catch (error) {
-            console.error("Error fetching payments:", error);
+            console.error("Error fetching revenue summary:", error);
         } finally {
             setLoading(false);
         }
-    };
+    }, []);
 
-    const calculateStats = (data: any[]) => {
-        const now = new Date();
-        let total = 0;
-        let monthly = 0;
-        let weekly = 0;
-        let daily = 0;
-
-        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-
-        // Start of week (Sunday)
-        const startOfWeek = new Date(now);
-        startOfWeek.setDate(now.getDate() - now.getDay());
-        startOfWeek.setHours(0, 0, 0, 0);
-
-        const startOfDay = new Date(now);
-        startOfDay.setHours(0, 0, 0, 0);
-
-        data.forEach(p => {
-            const amount = Number(p.amount) || 0;
-            const date = new Date(p.created_at);
-
-            total += amount;
-
-            if (date >= startOfMonth) monthly += amount;
-            if (date >= startOfWeek) weekly += amount;
-            if (date >= startOfDay) daily += amount;
-        });
-
-        setTotalRevenue(total);
-        setMonthlyRevenue(monthly);
-        setWeeklyRevenue(weekly);
-        setDailyRevenue(daily);
-    };
-
-    const handleCustomCheck = () => {
+    const handleCustomCheck = async () => {
         if (!startDate || !endDate) return;
 
-        const start = new Date(startDate);
-        const end = new Date(endDate);
-        end.setHours(23, 59, 59, 999); // Include full end day
-
-        const filtered = payments.filter(p => {
-            const date = new Date(p.created_at);
-            return date >= start && date <= end;
+        const { data, error } = await supabase.rpc('admin_revenue_between', {
+            p_start_date: startDate,
+            p_end_date: endDate,
         });
 
-        const sum = filtered.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
-        setCustomRevenue(sum);
+        if (error) {
+            console.error("Custom revenue check failed:", error);
+            return;
+        }
+
+        setCustomRevenue(Number(data) || 0);
     };
 
     useEffect(() => {
-        fetchPayments();
+        fetchRevenueSummary();
 
         // Realtime Listener
         const channel = supabase
@@ -99,14 +73,14 @@ const AdminAnalytics = () => {
             .on(
                 'postgres_changes',
                 { event: '*', schema: 'public', table: 'payments' },
-                () => fetchPayments()
+                () => fetchRevenueSummary()
             )
             .subscribe();
 
         return () => {
             supabase.removeChannel(channel);
         };
-    }, []);
+    }, [fetchRevenueSummary]);
 
     return (
         <>

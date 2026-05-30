@@ -6,6 +6,8 @@ import { Label } from "@/components/ui/label";
 import { ArrowLeft, Camera, CheckCircle2, Loader2, AlertCircle } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/hooks/use-toast";
+import { MESS_PLANS } from "@/lib/plans";
+import { validateImageFile } from "@/lib/uploads";
 
 const SignupPage = () => {
   const navigate = useNavigate();
@@ -29,10 +31,20 @@ const SignupPage = () => {
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      setPhotoFile(file);
-      setPhotoPreview(URL.createObjectURL(file));
+    const validation = validateImageFile(file, { maxSizeMB: 5 });
+
+    if (validation.ok === false) {
+      toast({ title: "Invalid profile photo", description: validation.error, variant: "destructive" });
+      e.target.value = "";
+      return;
     }
+
+    if (photoPreview?.startsWith("blob:")) {
+      URL.revokeObjectURL(photoPreview);
+    }
+
+    setPhotoFile(validation.file);
+    setPhotoPreview(URL.createObjectURL(validation.file));
   };
 
   const uploadPhoto = async (userId: string, file: File) => {
@@ -62,8 +74,7 @@ const SignupPage = () => {
     });
 
   const buildSignupNotification = () => ({
-    title: "New Student Signup!",
-    body: `${formData.name} has requested to join. Please review for approval.`,
+    eventType: 'student_signup' as const,
     targetRole: 'admin' as const
   });
 
@@ -294,12 +305,11 @@ const SignupPage = () => {
                     required={formData.isExistingMember}
                   >
                     <option value="">Select Plan</option>
-                    <option value="Boys Monthly Mess (1 Time)">Boys Monthly Mess (1 Time) (₹1300)</option>
-                    <option value="Girls Monthly Mess (1 Time)">Girls Monthly Mess (1 Time) (₹1000)</option>
-                    <option value="Boys Monthly Mess (2 Times)">Boys Monthly Mess (2 Times) (₹2200)</option>
-                    <option value="Girls Monthly Mess (2 Times)">Girls Monthly Mess (2 Times) (₹1600)</option>
-                    <option value="Boys 1 Day Mess">Boys 1 Day Mess (₹120)</option>
-                    <option value="Girls 1 Day Mess">Girls 1 Day Mess (₹80)</option>
+                    {MESS_PLANS.map((plan) => (
+                      <option key={plan.id} value={plan.label}>
+                        {plan.label} (₹{plan.price})
+                      </option>
+                    ))}
                   </select>
                 </div>
                 <div className="space-y-2">

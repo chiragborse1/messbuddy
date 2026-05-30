@@ -53,6 +53,12 @@ const notifyPendingSignup = async (userId: string) => {
     }
 };
 
+const finishEmailVerification = async (userId: string) => {
+    await uploadPendingAvatar(userId);
+    await notifyPendingSignup(userId);
+    await supabase.auth.signOut();
+};
+
 const AuthCallback = () => {
     const navigate = useNavigate();
     const [status, setStatus] = useState<"loading" | "success" | "error" | "reset_password">("loading");
@@ -63,26 +69,33 @@ const AuthCallback = () => {
     const [resetting, setResetting] = useState(false);
 
     useEffect(() => {
+        let settled = false;
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
             if (event === "PASSWORD_RECOVERY") {
                 // Show the set-new-password form (session is active)
+                settled = true;
                 setStatus("reset_password");
                 return;
             }
 
-            if ((event === "SIGNED_IN" || event === "TOKEN_REFRESHED") && session) {
-                // Upload pending profile photo if stored during signup
-                await uploadPendingAvatar(session.user.id);
-                await notifyPendingSignup(session.user.id);
-                // Sign out so student goes through normal login
-                await supabase.auth.signOut();
+            if ((event === "INITIAL_SESSION" || event === "SIGNED_IN" || event === "TOKEN_REFRESHED") && session) {
+                settled = true;
+                await finishEmailVerification(session.user.id);
                 setStatus("success");
             }
+        });
+
+        supabase.auth.getSession().then(async ({ data: { session } }) => {
+            if (settled || !session) return;
+            settled = true;
+            await finishEmailVerification(session.user.id);
+            setStatus("success");
         });
 
         // Handle URL errors (expired / invalid link)
         const hash = window.location.hash;
         if (hash.includes("error=")) {
+            settled = true;
             const params = new URLSearchParams(hash.replace("#", "?"));
             setErrorMsg(params.get("error_description") || "The verification link is invalid or has expired.");
             setStatus("error");

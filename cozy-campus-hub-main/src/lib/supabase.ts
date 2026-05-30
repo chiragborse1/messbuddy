@@ -43,7 +43,7 @@ export const getUser = async () => {
 export const getProfile = async (userId: string) => {
     const { data, error } = await supabase
         .from('profiles')
-        .select('*')
+        .select('id, name, email, mobile, college, course, photo_url, role, status, plan, on_leave, plan_start_date, plan_end_date, pending_amount')
         .eq('id', userId)
         .single();
 

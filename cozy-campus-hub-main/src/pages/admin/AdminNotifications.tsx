@@ -1,9 +1,8 @@
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import PageShell from "@/components/PageShell";
 import AdminBottomNav from "@/components/AdminBottomNav";
 import { Button } from "@/components/ui/button";
 import {
-    Bell,
     Send,
     Check,
     Loader2,
@@ -12,14 +11,51 @@ import {
     History,
     ArrowLeft,
     MessageSquare,
-    Camera,
     Image as ImageIcon,
     Trash2,
-    X
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/hooks/use-toast";
+import { validateImageFile } from "@/lib/uploads";
+
+interface NotificationLog {
+    id: string;
+    sender_id: string | null;
+    title: string;
+    body: string;
+    image: string | null;
+    target_role: string | null;
+    topic: string | null;
+    user_ids: string[] | null;
+    sent_count: number;
+    success_count: number;
+    error_count: number;
+    created_at: string;
+}
+
+const getFunctionErrorMessage = async (error: any) => {
+    if (!error) return "Unknown error occurred";
+
+    try {
+        const context = error.context;
+        if (context && typeof context.json === "function") {
+            const body = await context.json();
+            if (body?.error) return body.error;
+        }
+    } catch {
+        // Fall back to the client error message below.
+    }
+
+    return error.message || "Unknown error occurred";
+};
+
+const formatDateTime = (value: string) =>
+    new Date(value).toLocaleString("en-IN", {
+        dateStyle: "medium",
+        timeStyle: "short",
+        timeZone: "Asia/Kolkata",
+    });
 
 const AdminNotifications = () => {
     const navigate = useNavigate();
@@ -31,14 +67,75 @@ const AdminNotifications = () => {
     const [uploading, setUploading] = useState(false);
     const [loading, setLoading] = useState(false);
     const [activeTab, setActiveTab] = useState<"send" | "history">("send");
+    const [historyItems, setHistoryItems] = useState<NotificationLog[]>([]);
+    const [historyLoading, setHistoryLoading] = useState(false);
+
+    const fetchHistory = useCallback(async (silent = false) => {
+        if (!silent) setHistoryLoading(true);
+        try {
+            const { data, error } = await supabase
+                .from('notification_logs')
+                .select('id, sender_id, title, body, image, target_role, topic, user_ids, sent_count, success_count, error_count, created_at')
+                .order('created_at', { ascending: false })
+                .limit(50);
+
+            if (error) throw error;
+            setHistoryItems((data || []) as NotificationLog[]);
+        } catch (error: any) {
+            if (!silent) {
+                toast({ title: "Failed to load history", description: error.message, variant: "destructive" });
+            }
+        } finally {
+            if (!silent) setHistoryLoading(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        if (activeTab === "history") {
+            fetchHistory();
+        }
+    }, [activeTab, fetchHistory]);
+
+    useEffect(() => {
+        const channel = supabase
+            .channel('notification_logs_realtime')
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'notification_logs' },
+                () => fetchHistory(true)
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, [fetchHistory]);
 
     const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
-        if (file) {
-            setPhotoFile(file);
-            setPhotoPreview(URL.createObjectURL(file));
-            setImageUrl(""); // Clear manual URL if file is selected
+        const validation = validateImageFile(file, { maxSizeMB: 5 });
+
+        if (validation.ok === false) {
+            toast({ title: "Invalid image", description: validation.error, variant: "destructive" });
+            e.target.value = "";
+            return;
         }
+
+        if (photoPreview?.startsWith("blob:")) {
+            URL.revokeObjectURL(photoPreview);
+        }
+
+        setPhotoFile(validation.file);
+        setPhotoPreview(URL.createObjectURL(validation.file));
+        setImageUrl(""); // Clear manual URL if file is selected
+    };
+
+    const clearPhotoSelection = () => {
+        if (photoPreview?.startsWith("blob:")) {
+            URL.revokeObjectURL(photoPreview);
+        }
+        setPhotoFile(null);
+        setPhotoPreview(null);
     };
 
     const uploadNotificationPhoto = async (file: File) => {
@@ -117,38 +214,27 @@ const AdminNotifications = () => {
         };
 
         try {
-            console.log("🚀 Invoking Edge Function 'send-notification'...", payload);
             const { data, error } = await supabase.functions.invoke('send-notification', {
                 body: payload
             });
 
             if (error) {
-                console.error("❌ Supabase Function Error:", error);
-
-                // Try to get detailed error from response body
-                try {
-                    const errorData = await error.context.json();
-                    console.log("Detailed Error Data:", errorData);
-                    if (errorData.error) throw new Error(errorData.error);
-                } catch (e: any) {
-                    if (e.message && e.message !== "[object Object]") throw e;
-                }
-
-                throw error;
+                throw new Error(await getFunctionErrorMessage(error));
             }
 
-            console.log("✅ Function Response:", data);
-            toast({ title: "Notification Sent!", description: "Students will receive it shortly." });
+            const sentCount = data?.successCount ?? data?.count ?? 0;
+            toast({
+                title: "Notification Sent!",
+                description: `${sentCount} device${sentCount === 1 ? "" : "s"} accepted it.`,
+            });
             if (type === "custom") {
                 setTitle("");
                 setMessage("");
                 setImageUrl("");
-                setPhotoFile(null);
-                setPhotoPreview(null);
+                clearPhotoSelection();
             }
+            void fetchHistory(true);
         } catch (error: any) {
-            console.error("💥 Notification send failed:", error);
-
             let errorMessage = error.message || "Unknown error occurred";
 
             // If it's a Supabase error object, it might be stringified JSON
@@ -207,19 +293,19 @@ const AdminNotifications = () => {
                         <div className="grid grid-cols-2 gap-3">
                             <button
                                 onClick={() => sendNotification("meal")}
-                                className="bg-blue-50 border border-blue-200 p-4 rounded-2xl text-left hover:bg-blue-100 transition-colors"
+                                className="bg-card border border-border/50 p-4 rounded-2xl text-left hover:bg-muted/50 transition-colors"
                             >
-                                <Utensils className="w-6 h-6 text-blue-600 mb-2" />
-                                <p className="font-bold text-blue-800 text-sm">Meal Ready</p>
-                                <p className="text-[10px] text-blue-600">Fires "Food is hot" alert</p>
+                                <Utensils className="w-6 h-6 text-primary mb-2" />
+                                <p className="font-bold text-foreground text-sm">Meal Ready</p>
+                                <p className="text-[10px] text-muted-foreground">Fires "Food is hot" alert</p>
                             </button>
-	                            <button
-	                                onClick={() => sendNotification("mess")}
-                                className="bg-green-50 border border-green-200 p-4 rounded-2xl text-left hover:bg-green-100 transition-colors"
+                            <button
+                                onClick={() => sendNotification("mess")}
+                                className="bg-card border border-border/50 p-4 rounded-2xl text-left hover:bg-muted/50 transition-colors"
                             >
-                                <Check className="w-6 h-6 text-green-600 mb-2" />
-                                <p className="font-bold text-green-800 text-sm">Mess Open</p>
-                                <p className="text-[10px] text-green-600">Quick serving alert</p>
+                                <Check className="w-6 h-6 text-primary mb-2" />
+                                <p className="font-bold text-foreground text-sm">Mess Open</p>
+                                <p className="text-[10px] text-muted-foreground">Quick serving alert</p>
                             </button>
                         </div>
 
@@ -270,8 +356,8 @@ const AdminNotifications = () => {
 
                                     {photoPreview && (
                                         <button
-                                            onClick={() => { setPhotoFile(null); setPhotoPreview(null); }}
-                                            className="w-12 h-12 rounded-xl bg-red-50 border border-red-100 flex items-center justify-center text-red-500 hover:bg-red-100"
+                                            onClick={clearPhotoSelection}
+                                            className="w-12 h-12 rounded-xl bg-destructive/10 border border-destructive/20 flex items-center justify-center text-destructive hover:bg-destructive/15"
                                         >
                                             <Trash2 className="w-5 h-5" />
                                         </button>
@@ -310,18 +396,62 @@ const AdminNotifications = () => {
                             </Button>
                         </div>
 
-                        <div className="p-4 bg-orange-50 rounded-2xl border border-orange-100 flex gap-3">
-                            <AlertCircle className="w-5 h-5 text-orange-600 shrink-0" />
-                            <p className="text-[10px] text-orange-800 leading-relaxed">
+                        <div className="p-4 bg-primary/5 rounded-2xl border border-primary/10 flex gap-3">
+                            <AlertCircle className="w-5 h-5 text-primary shrink-0" />
+                            <p className="text-[10px] text-muted-foreground leading-relaxed">
                                 <b>Pro Tip:</b> Use announcements sparingly to keep students engaged. Avoid sending late at night unless it's an emergency.
                             </p>
                         </div>
                     </div>
                 ) : (
-                    <div className="flex flex-col items-center justify-center py-20 text-muted-foreground animate-slide-up">
-                        <History className="w-12 h-12 mb-4 opacity-20" />
-                        <p className="text-sm">Notification history coming soon.</p>
-                        <p className="text-[10px] mt-1">Check your Supabase logs for details.</p>
+                    <div className="space-y-3 animate-slide-up">
+                        {historyLoading ? (
+                            <div className="flex justify-center py-16">
+                                <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                            </div>
+                        ) : historyItems.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
+                                <History className="w-12 h-12 mb-4 opacity-20" />
+                                <p className="text-sm">No notification history yet.</p>
+                                <p className="text-[10px] mt-1">Sent broadcasts will appear here after the function logs them.</p>
+                            </div>
+                        ) : (
+                            historyItems.map((item) => {
+                                const hasErrors = item.error_count > 0;
+                                return (
+                                    <div key={item.id} className="rounded-2xl border border-border/50 bg-card p-4 shadow-sm">
+                                        <div className="flex items-start justify-between gap-3">
+                                            <div className="min-w-0">
+                                                <p className="text-sm font-bold text-foreground truncate">{item.title}</p>
+                                                <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-muted-foreground">{item.body}</p>
+                                            </div>
+                                            {item.image && (
+                                                <img
+                                                    src={item.image}
+                                                    alt=""
+                                                    className="w-12 h-12 rounded-xl object-cover border border-border/50"
+                                                    loading="lazy"
+                                                />
+                                            )}
+                                        </div>
+                                        <div className="mt-4 flex flex-wrap items-center gap-2 text-[10px] font-semibold text-muted-foreground">
+                                            <span className="rounded-full bg-muted px-2 py-1">
+                                                {item.topic || item.target_role || `${item.user_ids?.length || 0} selected`}
+                                            </span>
+                                            <span className="rounded-full bg-primary/10 px-2 py-1 text-primary">
+                                                Sent {item.success_count}/{item.sent_count}
+                                            </span>
+                                            {hasErrors && (
+                                                <span className="rounded-full bg-destructive/10 px-2 py-1 text-destructive">
+                                                    {item.error_count} failed
+                                                </span>
+                                            )}
+                                            <span className="ml-auto">{formatDateTime(item.created_at)}</span>
+                                        </div>
+                                    </div>
+                                );
+                            })
+                        )}
                     </div>
                 )}
             </PageShell>

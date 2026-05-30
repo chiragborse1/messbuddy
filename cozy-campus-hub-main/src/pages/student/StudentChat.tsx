@@ -8,6 +8,8 @@ import { supabase } from "@/lib/supabase";
 import { Send, User as UserIcon, Image as ImageIcon, X, Download, Reply, Clock } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import SwipeableMessage from "@/components/SwipeableMessage";
+import { toast } from "@/hooks/use-toast";
+import { validateImageFile } from "@/lib/uploads";
 
 interface Message {
     id: string;
@@ -168,11 +170,15 @@ const StudentChat = () => {
     const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
             const file = e.target.files[0];
-            if (file.type.startsWith('image/')) {
-                setSelectedFile(file);
-            } else {
-                alert('Please select an image file');
+            const validation = validateImageFile(file, { maxSizeMB: 5 });
+
+            if (validation.ok === false) {
+                toast({ title: "Invalid image", description: validation.error, variant: "destructive" });
+                e.target.value = "";
+                return;
             }
+
+            setSelectedFile(validation.file);
         }
     };
 
@@ -227,7 +233,7 @@ const StudentChat = () => {
             }
         } catch (error) {
             console.error("Error in send message flow:", error);
-            alert("Failed to send message. Please try again.");
+            toast({ title: "Failed to send message", description: "Please try again.", variant: "destructive" });
         } finally {
             setIsUploading(false);
         }

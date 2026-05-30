@@ -33,7 +33,7 @@ const AdminMenu = () => {
     if (!silent) setLoading(true);
     const { data, error } = await supabase
       .from('menu_items')
-      .select('*')
+      .select('id, name, category, votes, image_url')
       .order('id', { ascending: true });
 
     if (data) {
@@ -170,7 +170,7 @@ const AdminMenu = () => {
     }
   };
 
-  const toggleVoting = async (open: boolean) => {
+  const toggleVoting = async (open: boolean, notifyWinners = true) => {
     try {
       // 1. Check if config row exists
       const { data: existingConfig, error: fetchError } = await supabase
@@ -207,19 +207,19 @@ const AdminMenu = () => {
       });
 
       // Notify Students of Menu Results when voting closes
-      if (!open) {
+      if (!open && notifyWinners) {
         const fetchWinnersAndNotify = async () => {
           try {
             // Fetch top 1 lunch and top 1 dinner
             const { data: winners } = await supabase
               .from('menu_items')
-              .select('name, category, image_url')
+              .select('name, category, image_url, votes')
               .neq('category', 'config')
               .order('votes', { ascending: false });
 
             if (winners && winners.length > 0) {
-              const topLunch = winners.find(i => i.category === 'lunch');
-              const topDinner = winners.find(i => i.category === 'dinner');
+              const topLunch = winners.find(i => i.category === 'lunch' && i.votes > 0);
+              const topDinner = winners.find(i => i.category === 'dinner' && i.votes > 0);
 
               let message = "The menu has been decided!";
               if (topLunch && topDinner) {
@@ -230,14 +230,16 @@ const AdminMenu = () => {
                 message = `Tomorrow's Dinner: ${topDinner.name}`;
               }
 
-              supabase.functions.invoke('send-notification', {
-                body: {
-                  title: "🏆 Voting Results Are In!",
-                  body: message,
-                  image: topLunch?.image_url || topDinner?.image_url || "",
-                  topic: "all_students"
-                }
-              });
+              if (topLunch || topDinner) {
+                supabase.functions.invoke('send-notification', {
+                  body: {
+                    title: "🏆 Voting Results Are In!",
+                    body: message,
+                    image: topLunch?.image_url || topDinner?.image_url || "",
+                    topic: "all_students"
+                  }
+                });
+              }
             }
           } catch (e) {
             console.error("Failed to notify menu winners:", e);
@@ -319,7 +321,7 @@ const AdminMenu = () => {
     // Note: This requires a policy that allows admins to delete rows in 'votes'
     const { error: votesError } = await supabase.from('votes').delete().neq('id', 0);
 
-    await toggleVoting(false);
+    await toggleVoting(false, false);
 
     if (!error && !votesError) {
       toast({ title: "Votes Reset", description: "All votes cleared." });

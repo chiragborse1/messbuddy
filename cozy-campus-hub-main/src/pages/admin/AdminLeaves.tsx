@@ -85,7 +85,7 @@ const AdminLeaves = () => {
           // Find last approved leave
           const { data: lastLeave } = await supabase
             .from('leave_requests')
-            .select('*')
+            .select('id, start_date, created_at')
             .eq('user_id', request.user_id)
             .ilike('reason', '[LEAVE]%')
             .eq('status', 'approved')
