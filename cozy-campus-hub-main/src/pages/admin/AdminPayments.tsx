@@ -472,7 +472,7 @@ const AdminPayments = () => {
           </TabsContent>
 
           <TabsContent value="plans" className="w-full mt-4">
-            <div className="space-y-4 pb-4">
+            <div className="space-y-4 pb-32">
               <form onSubmit={savePlan} className="bg-card rounded-2xl border border-border/50 p-4 shadow-sm space-y-3">
                 <div className="flex items-center justify-between gap-3">
                   <div>

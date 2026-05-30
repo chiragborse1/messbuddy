@@ -446,10 +446,10 @@ const AdminDashboard = () => {
                 </button>
               </div>
 
-              <div className="grid grid-cols-2 gap-3 mt-6 pb-20">
+              <div className="grid grid-cols-2 gap-3 mt-6 pb-28">
                 {statCards.map((stat) => (
                   <button
-                    key={stat.path}
+                    key={`${stat.path}-${stat.value}`}
                     onClick={() => navigate(stat.path)}
                     className="bg-card rounded-2xl border border-border/50 p-4 shadow-sm text-left hover:border-primary/30 transition-colors"
                   >

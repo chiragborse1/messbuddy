@@ -10,7 +10,7 @@ interface PageShellProps {
 
 const PageShell = ({ children, title, subtitle, className = "", action }: PageShellProps) => {
   return (
-    <div className={`min-h-screen pb-20 ${className}`}>
+    <div className={`min-h-screen pb-28 ${className}`}>
       {(title || subtitle || action) && (
         <header className="px-5 pt-12 pb-4 flex justify-between items-start">
           <div>

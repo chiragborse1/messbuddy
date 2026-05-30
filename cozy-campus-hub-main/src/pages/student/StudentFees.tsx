@@ -244,7 +244,7 @@ const StudentFees = () => {
           </Button>
         }
       >
-        <div className="pb-24 space-y-6">
+        <div className="pb-32 space-y-6">
 
           {showHistory ? (
             /* History View */
