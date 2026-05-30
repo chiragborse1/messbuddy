@@ -6,16 +6,47 @@ const corsHeaders = {
 }
 
 // Reuse the push notification logic from send-notification for consistency
-async function sendPushNotification(supabase: any, userId: string, title: string, body: string) {
+async function sendPushNotification(supabase: any, authHeader: string, userId: string, title: string, body: string) {
     try {
         await supabase.functions.invoke('send-notification', {
-            body: { title, body, userIds: [userId] }
+            body: { title, body, userIds: [userId] },
+            headers: { Authorization: authHeader },
         });
         return true;
     } catch (e) {
         console.error(`Failed to send push to ${userId}:`, e);
         return false;
     }
+}
+
+async function requireAdmin(req: Request, adminClient: any) {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
+    const anonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? ''
+    const authHeader = req.headers.get('Authorization') ?? ''
+
+    if (!supabaseUrl || !anonKey || !authHeader) {
+        throw new Error('Authentication required')
+    }
+
+    const userClient = createClient(supabaseUrl, anonKey, {
+        global: { headers: { Authorization: authHeader } },
+    })
+    const { data: { user }, error } = await userClient.auth.getUser()
+    if (error || !user) {
+        throw new Error('Invalid authentication')
+    }
+
+    const { data: profile, error: profileError } = await adminClient
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .single()
+
+    if (profileError || !profile || !['admin', 'developer'].includes(profile.role)) {
+        throw new Error('Admin access required')
+    }
+
+    return authHeader
 }
 
 async function sendReminderEmail(email: string, name: string, daysLeft: number, planEndDate: string) {
@@ -68,6 +99,7 @@ Deno.serve(async (req) => {
             Deno.env.get('SUPABASE_URL') ?? '',
             Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
         )
+        const authHeader = await requireAdmin(req, supabase)
 
         const today = new Date();
         today.setHours(0, 0, 0, 0);
@@ -98,7 +130,7 @@ Deno.serve(async (req) => {
                     // Send Push
                     const title = daysLeft === 1 ? "🚨 Plan Expiring Tomorrow!" : `⚠️ Plan Expires in ${daysLeft} days`;
                     const body = `Your mess membership ends on ${new Date(student.plan_end_date).toLocaleDateString()}. Please renew soon!`;
-                    await sendPushNotification(supabase, student.id, title, body);
+                    await sendPushNotification(supabase, authHeader, student.id, title, body);
                     results.push_sent++;
                 }
             }
@@ -110,7 +142,7 @@ Deno.serve(async (req) => {
                 // But user specifically asked for "instalment notifications"
                 const title = "💸 Installment Reminder";
                 const body = `You have a pending balance of ₹${student.pending_amount}. Please clear your dues at the mess office.`;
-                await sendPushNotification(supabase, student.id, title, body);
+                await sendPushNotification(supabase, authHeader, student.id, title, body);
                 results.push_sent++;
             }
         }

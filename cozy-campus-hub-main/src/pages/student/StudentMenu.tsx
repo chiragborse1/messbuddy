@@ -90,60 +90,12 @@ const StudentMenu = () => {
     if (votedItems.includes(item.id)) return;
 
     try {
-      // 1. Identify "Old" item to decrement (if any)
-      // We look for any PREVIOUS vote in this category to update counts later
-      const { data: existingVote } = await supabase
-        .from('votes')
-        .select('id, menu_item_id')
-        .eq('user_id', user.id)
-        .eq('category', item.category)
-        .maybeSingle();
+      const { error: voteError } = await supabase.rpc('vote_for_item', {
+        item_id: item.id,
+        category_name: item.category,
+      });
 
-      const oldItemId = existingVote?.menu_item_id;
-
-      // 2. Clear ANY existing vote for this category by this user
-      // Even if 'existingVote' was null, there might be a race condition, so we DELETE to be safe.
-      const { error: deleteError } = await supabase
-        .from('votes')
-        .delete()
-        .eq('user_id', user.id)
-        .eq('category', item.category);
-
-      if (deleteError) throw deleteError;
-
-      // 3. Insert the NEW vote
-      const { error: insertError } = await supabase
-        .from('votes')
-        .insert({
-          user_id: user.id,
-          category: item.category,
-          menu_item_id: item.id
-        });
-
-      if (insertError) throw insertError;
-
-      // 4. Recalculate Counts for affected items
-      // Ensure we update counts for both the new item and the OLD item (if it existed)
-      let idsToUpdate = [item.id];
-      if (oldItemId && oldItemId !== item.id) {
-        idsToUpdate.push(oldItemId);
-      }
-
-      for (const id of idsToUpdate) {
-        // Count total votes for this item
-        const { count, error: countError } = await supabase
-          .from('votes')
-          .select('*', { count: 'exact', head: true })
-          .eq('menu_item_id', id);
-
-        if (!countError) {
-          // Update menu_items with accurate count
-          await supabase
-            .from('menu_items')
-            .update({ votes: count || 0 })
-            .eq('id', id);
-        }
-      }
+      if (voteError) throw voteError;
 
       toast({
         title: "Vote Recorded!",

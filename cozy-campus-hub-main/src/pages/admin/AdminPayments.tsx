@@ -126,14 +126,9 @@ const AdminPayments = () => {
             newEndDate = profile?.plan_end_date ? new Date(profile.plan_end_date) : new Date();
           }
 
-          // Calculate new pending amount using accumulation logic
-          // (Existing Debt + Total Price of Selection) - Amount Paid
           const existingDebt = Number(profile?.pending_amount || 0);
-
-          // If the payment is marked as "Partial" or if they are buying a new plan,
-          // we calculate based on the full price of that plan.
-          // If they are just paying an old balance, fullPrice will be 0 (or match amount).
-          let newPendingAmount = Math.max(0, (existingDebt + fullPrice) - payment.amount);
+          const expectedCharge = isPartial ? fullPrice : payment.amount;
+          const newPendingAmount = Math.max(0, existingDebt + expectedCharge - payment.amount);
 
           await supabase.from('profiles').update({
             plan: basePlanName,

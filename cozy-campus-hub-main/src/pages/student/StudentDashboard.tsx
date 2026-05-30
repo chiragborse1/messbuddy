@@ -6,13 +6,12 @@ import { User, Clock, CalendarDays, Utensils, Check, ChevronRight, MessageCircle
 import { useUser } from "@/contexts/UserContext";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 
 
 const StudentDashboard = () => {
   const { user } = useUser();
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
 
   // Determine next meal based on time (cutoff 3 PM)
   const nextMeal = new Date().getHours() < 15 ? "Lunch, 12:30 PM" : "Dinner, 7:30 PM";
@@ -82,7 +81,7 @@ const StudentDashboard = () => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [queryClient]);
+  }, [refetch]);
 
   if (!user) {
     navigate("/");

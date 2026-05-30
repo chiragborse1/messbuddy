@@ -17,6 +17,12 @@ interface NotificationPayload {
     targetRole?: 'student' | 'admin';
 }
 
+type Requester = {
+    id: string;
+    role: string;
+    isAdmin: boolean;
+}
+
 serve(async (req: Request) => {
     if (req.method === 'OPTIONS') {
         return new Response('ok', { headers: corsHeaders })
@@ -25,8 +31,20 @@ serve(async (req: Request) => {
     try {
         console.log("--- Notification Request Start ---");
         const payload: NotificationPayload = await req.json()
+        const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
+        const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+        const anonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? ''
 
-        let rawSecret = Deno.env.get("FIREBASE_SERVICE_ACCOUNT_JSON")
+        const supabase = createClient(supabaseUrl, serviceRoleKey)
+        const requester = await getRequester(req, supabaseUrl, anonKey, supabase)
+        if (!requester.isAdmin && payload.targetRole !== 'admin') {
+            return new Response(JSON.stringify({ error: "Only admins can send student broadcasts." }), {
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+                status: 403,
+            })
+        }
+
+        const rawSecret = Deno.env.get("FIREBASE_SERVICE_ACCOUNT_JSON")
         if (!rawSecret) throw new Error("Missing FIREBASE_SERVICE_ACCOUNT_JSON secret.")
 
         let secretString = rawSecret.trim();
@@ -53,12 +71,6 @@ serve(async (req: Request) => {
         const projectID = serviceAccount.project_id;
         const accessToken = await getGoogleAccessToken(serviceAccount)
 
-        // Supabase Client for fetching tokens
-        const supabase = createClient(
-            Deno.env.get('SUPABASE_URL') ?? '',
-            Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-        )
-
         let tokens: string[] = [];
 
         // Determine targets
@@ -77,6 +89,7 @@ serve(async (req: Request) => {
             const { data, error } = await supabase
                 .from('profiles')
                 .select('fcm_token')
+                .eq('role', 'student')
                 .not('fcm_token', 'is', null);
 
             if (error) throw error;
@@ -129,6 +142,43 @@ serve(async (req: Request) => {
         })
     }
 })
+
+async function getRequester(
+    req: Request,
+    supabaseUrl: string,
+    anonKey: string,
+    adminClient: ReturnType<typeof createClient>,
+): Promise<Requester> {
+    const authHeader = req.headers.get('Authorization') ?? ''
+    if (!authHeader || !anonKey || !supabaseUrl) {
+        throw new Error("Authentication required.")
+    }
+
+    const userClient = createClient(supabaseUrl, anonKey, {
+        global: { headers: { Authorization: authHeader } },
+    })
+    const { data: { user }, error } = await userClient.auth.getUser()
+    if (error || !user) {
+        throw new Error("Invalid authentication.")
+    }
+
+    const { data: profile, error: profileError } = await adminClient
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .single()
+
+    if (profileError || !profile) {
+        throw new Error("Profile not found.")
+    }
+
+    const role = profile.role ?? 'student'
+    return {
+        id: user.id,
+        role,
+        isAdmin: role === 'admin' || role === 'developer',
+    }
+}
 
 async function getGoogleAccessToken(serviceAccount: any) {
     const header = { alg: "RS256", typ: "JWT" }

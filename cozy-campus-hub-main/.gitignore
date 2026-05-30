@@ -11,10 +11,11 @@ lerna-debug.log*
 *.exe
 *.backup
 bun.lockb
-package-lock.json
 
-# Supabase SQL migration scripts (already applied, no need in repo)
+# Supabase migration SQL is tracked; ad hoc SQL dumps are ignored.
 *.sql
+!supabase/migrations/*.sql
+supabase/.temp/
 node_modules
 dist
 dist-ssr
@@ -23,6 +24,11 @@ dist-ssr
 # Environment variables (NEVER commit these - contains Supabase keys!)
 .env
 .env.*
+
+# Local secret upload helpers / downloaded service-account keys
+upload_secret.js
+*service-account*.json
+*firebase-adminsdk*.json
 
 # Editor directories and files
 .vscode/*
@@ -34,3 +40,4 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+.vade-report

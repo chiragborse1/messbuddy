@@ -32,6 +32,21 @@ interface Message {
     }
 }
 
+const normalizeMessage = (msg: any): Message => {
+    const replyTo = Array.isArray(msg.reply_to) ? msg.reply_to[0] : msg.reply_to;
+
+    return {
+        ...msg,
+        profiles: Array.isArray(msg.profiles) ? msg.profiles[0] : msg.profiles,
+        reply_to: replyTo
+            ? {
+                ...replyTo,
+                profiles: Array.isArray(replyTo.profiles) ? replyTo.profiles[0] : replyTo.profiles,
+            }
+            : replyTo,
+    };
+};
+
 const AdminChat = () => {
     const { user, loading } = useUser();
     const navigate = useNavigate();
@@ -53,6 +68,8 @@ const AdminChat = () => {
 
     // Cleanup old messages (Lazy "Disappearing Messages" implementation)
     useEffect(() => {
+        if (!user) return;
+
         const cleanupOldMessages = async () => {
             const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
@@ -68,51 +85,17 @@ const AdminChat = () => {
         };
 
         cleanupOldMessages();
-    }, []);
-
-    const handleClearChat = async () => {
-        if (!window.confirm("Are you sure you want to clear the ENTIRE chat history? This cannot be undone.")) return;
-
-        // Delete all messages. We use a filter like created_at > 1970 to match all rows
-        // because supabase client usually requires a filter for delete operations.
-        const { error } = await supabase
-            .from('messages')
-            .delete()
-            .gt('created_at', '1970-01-01');
-
-        if (error) {
-            toast({ title: "Failed to clear chat", description: error.message, variant: "destructive" });
-        } else {
-            setMessages([]);
-            toast({ title: "Chat History Cleared" });
-        }
-    };
-
-    if (loading) {
-        return (
-            <div className="flex items-center justify-center h-screen bg-background text-primary">
-                <div className="flex flex-col items-center gap-2">
-                    <div className="w-8 h-8 border-4 border-current border-t-transparent rounded-full animate-spin" />
-                    <p className="text-sm font-medium">Loading chat...</p>
-                </div>
-            </div>
-        );
-    }
-
-    if (!user) return null; // Safe fallback, though useEffect handles redirect
-
-    const scrollToBottom = () => {
-        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    };
+    }, [user]);
 
     // Scroll on new messages
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     useEffect(() => {
-        scrollToBottom();
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }, [messages, replyingTo]);
 
     // Fetch messages
     useEffect(() => {
+        if (!user) return;
+
         const fetchMessages = async () => {
             const { data, error } = await supabase
                 .from('messages')
@@ -135,20 +118,7 @@ const AdminChat = () => {
                 .order('created_at', { ascending: true });
 
             if (data) {
-                const formattedMessages = data.map((msg: any) => ({
-                    ...msg,
-                    profiles: Array.isArray(msg.profiles) ? msg.profiles[0] : msg.profiles,
-                    reply_to: Array.isArray(msg.reply_to) ? msg.reply_to[0] : msg.reply_to
-                }));
-
-                const finalMessages = formattedMessages.map((msg: any) => {
-                    if (msg.reply_to && Array.isArray(msg.reply_to.profiles)) {
-                        msg.reply_to.profiles = msg.reply_to.profiles[0];
-                    }
-                    return msg;
-                });
-
-                setMessages(finalMessages);
+                setMessages(data.map(normalizeMessage));
             } else if (error) {
                 console.error("Error fetching messages:", error);
             }
@@ -188,16 +158,7 @@ const AdminChat = () => {
                     }
 
                     if (fullMessageData) {
-                        const formattedMsg = {
-                            ...fullMessageData,
-                            profiles: Array.isArray(fullMessageData.profiles) ? fullMessageData.profiles[0] : fullMessageData.profiles,
-                            reply_to: Array.isArray(fullMessageData.reply_to) ? fullMessageData.reply_to[0] : fullMessageData.reply_to
-                        };
-                        if (formattedMsg.reply_to && Array.isArray(formattedMsg.reply_to.profiles)) {
-                            formattedMsg.reply_to.profiles = formattedMsg.reply_to.profiles[0];
-                        }
-
-                        setMessages((prev) => [...prev, formattedMsg]);
+                        setMessages((prev) => [...prev, normalizeMessage(fullMessageData)]);
                     }
                 }
             )
@@ -213,7 +174,38 @@ const AdminChat = () => {
         return () => {
             supabase.removeChannel(channel);
         };
-    }, []);
+    }, [user]);
+
+    const handleClearChat = async () => {
+        if (!window.confirm("Are you sure you want to clear the ENTIRE chat history? This cannot be undone.")) return;
+
+        // Delete all messages. We use a filter like created_at > 1970 to match all rows
+        // because supabase client usually requires a filter for delete operations.
+        const { error } = await supabase
+            .from('messages')
+            .delete()
+            .gt('created_at', '1970-01-01');
+
+        if (error) {
+            toast({ title: "Failed to clear chat", description: error.message, variant: "destructive" });
+        } else {
+            setMessages([]);
+            toast({ title: "Chat History Cleared" });
+        }
+    };
+
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center h-screen bg-background text-primary">
+                <div className="flex flex-col items-center gap-2">
+                    <div className="w-8 h-8 border-4 border-current border-t-transparent rounded-full animate-spin" />
+                    <p className="text-sm font-medium">Loading chat...</p>
+                </div>
+            </div>
+        );
+    }
+
+    if (!user) return null; // Safe fallback, though useEffect handles redirect
 
     const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {

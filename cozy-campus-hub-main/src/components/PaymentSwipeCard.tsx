@@ -21,7 +21,7 @@ export const PaymentSwipeCard = ({ payment, onSwipe, onImageClick, className, st
     const opacityLeft = useTransform(x, [-100, 0], [1, 0]); // Left swipe accepts
     const opacityRight = useTransform(x, [0, 100], [0, 1]); // Right swipe rejects
 
-    const handleDragEnd = (event: any, info: PanInfo) => {
+    const handleDragEnd = (_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
         if (info.offset.x < -100) {
             setExitX(-200);
             onSwipe(payment.id, 'left'); // Left accepts

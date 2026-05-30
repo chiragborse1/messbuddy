@@ -284,42 +284,17 @@ const AdminMenu = () => {
   const handleManualNotification = async () => {
     setSendingNotification(true);
     try {
-      // Use direct fetch to diagnose the connection issue
-      // The function lives at [SUPABASE_URL]/functions/v1/send-notifications
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const functionUrl = `${supabaseUrl}/functions/v1/send-notifications`;
-      const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-      console.log("Invoking function at:", functionUrl);
-
-      const response = await fetch(functionUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${anonKey}`, // Essential for Supabase Functions
-        },
-        body: JSON.stringify({ manual: true }),
+      const { data, error } = await supabase.functions.invoke('payment-reminder', {
+        body: { manual: true },
       });
 
-      // Handle non-JSON responses (like HTML error pages)
-      const contentType = response.headers.get("content-type");
-      let data;
-      if (contentType && contentType.indexOf("application/json") !== -1) {
-        data = await response.json();
-      } else {
-        const text = await response.text();
-        throw new Error(`Server returned non-JSON response: ${text || response.statusText}`);
-      }
+      if (error) throw error;
 
-      if (!response.ok) {
-        throw new Error(data.error || data.message || `Error ${response.status}: ${JSON.stringify(data)}`);
-      }
-
-      const sentCount = data.sent_count || 0;
+      const sentCount = (data?.results?.push_sent || 0) + (data?.results?.email_sent || 0);
       toast({
         title: "Notifications Sent",
         description: `Successfully noticed ${sentCount} students expiring soon.`,
-        variant: sentCount > 0 ? "default" : "secondary"
+        variant: "default"
       });
 
     } catch (err: any) {

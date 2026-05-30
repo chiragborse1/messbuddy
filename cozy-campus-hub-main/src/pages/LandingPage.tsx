@@ -22,6 +22,8 @@ const LandingPage = () => {
                 navigate('/admin', { replace: true });
             } else if (user.role === 'student' && user.status !== 'pending') {
                 navigate('/student', { replace: true });
+            } else {
+                navigate('/login', { replace: true });
             }
         }
     }, [user, authLoading, navigate]);

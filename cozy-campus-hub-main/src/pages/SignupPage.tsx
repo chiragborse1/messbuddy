@@ -53,6 +53,20 @@ const SignupPage = () => {
     return data.publicUrl;
   };
 
+  const fileToDataUrl = (file: File) =>
+    new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(file);
+    });
+
+  const buildSignupNotification = () => ({
+    title: "New Student Signup!",
+    body: `${formData.name} has requested to join. Please review for approval.`,
+    targetRole: 'admin' as const
+  });
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -92,23 +106,27 @@ const SignupPage = () => {
       // Note: All profile details (name, college, plan, etc.) are now 
       // automatically synced by the database trigger from the signup metadata.
 
-      // Upload photo if provided
       if (photoFile) {
-        const photoUrl = await uploadPhoto(data.user.id, photoFile);
-        if (photoUrl) {
-          // Photo URL update is the only manual sync needed
-          await supabase.from('profiles').update({ photo_url: photoUrl }).eq('id', data.user.id);
+        if (data.session) {
+          const photoUrl = await uploadPhoto(data.user.id, photoFile);
+          if (photoUrl) {
+            await supabase.from('profiles').update({ photo_url: photoUrl }).eq('id', data.user.id);
+          }
+        } else {
+          const fileExt = photoFile.name.split('.').pop() || "jpg";
+          localStorage.setItem(`pending_avatar_${data.user.id}`, await fileToDataUrl(photoFile));
+          localStorage.setItem(`pending_avatar_ext_${data.user.id}`, fileExt);
         }
       }
 
-      // Notify Admins of new signup
-      supabase.functions.invoke('send-notification', {
-        body: {
-          title: "🆕 New Student Signup!",
-          body: `${formData.name} has requested to join. Please review for approval.`,
-          targetRole: 'admin'
-        }
-      });
+      const signupNotification = buildSignupNotification();
+      if (data.session) {
+        void supabase.functions.invoke('send-notification', {
+          body: signupNotification
+        });
+      } else {
+        localStorage.setItem(`pending_signup_notice_${data.user.id}`, JSON.stringify(signupNotification));
+      }
 
       await supabase.auth.signOut();
       setSubmitted(true);

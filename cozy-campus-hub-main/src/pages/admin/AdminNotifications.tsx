@@ -65,6 +65,11 @@ const AdminNotifications = () => {
     };
 
     const sendNotification = async (type: "custom" | "meal" | "mess") => {
+        if (type === "custom" && (!title.trim() || !message.trim())) {
+            toast({ title: "Incomplete", description: "Please enter both title and message.", variant: "destructive" });
+            return;
+        }
+
         setLoading(true);
         let finalImage = type === "custom" ? imageUrl : "";
 
@@ -78,8 +83,8 @@ const AdminNotifications = () => {
             finalImage = uploadedUrl;
         }
 
-        let finalTitle = type === "custom" ? title : (type === "meal" ? "🍱 Meal is READY!" : "📢 Mess Update");
-        let finalBody = type === "custom" ? message : (type === "meal" ? "Food is served and hot! Come enjoy your lunch/dinner." : message);
+        const finalTitle = type === "custom" ? title : (type === "meal" ? "🍱 Meal is READY!" : "📢 Mess Update");
+        let finalBody = type === "custom" ? message : (type === "meal" ? "Food is served and hot! Come enjoy your lunch/dinner." : "The mess is now open for students.");
 
         // Auto-fetch menu for meal ready notifications
         if (type === "meal") {
@@ -111,12 +116,6 @@ const AdminNotifications = () => {
             topic: "all_students"
         };
 
-        if (type === "custom" && (!title.trim() || !message.trim())) {
-            toast({ title: "Incomplete", description: "Please enter both title and message.", variant: "destructive" });
-            return;
-        }
-
-        setLoading(true);
         try {
             console.log("🚀 Invoking Edge Function 'send-notification'...", payload);
             const { data, error } = await supabase.functions.invoke('send-notification', {
@@ -157,7 +156,9 @@ const AdminNotifications = () => {
                 try {
                     const parsed = JSON.parse(errorMessage.substring(errorMessage.indexOf('{')));
                     if (parsed.error) errorMessage = parsed.error;
-                } catch (e) { }
+                } catch {
+                    // Keep the original Supabase error message if parsing fails.
+                }
             }
 
             toast({
@@ -212,11 +213,8 @@ const AdminNotifications = () => {
                                 <p className="font-bold text-blue-800 text-sm">Meal Ready</p>
                                 <p className="text-[10px] text-blue-600">Fires "Food is hot" alert</p>
                             </button>
-                            <button
-                                onClick={() => {
-                                    setMessage("The mess is now open for students.");
-                                    sendNotification("mess");
-                                }}
+	                            <button
+	                                onClick={() => sendNotification("mess")}
                                 className="bg-green-50 border border-green-200 p-4 rounded-2xl text-left hover:bg-green-100 transition-colors"
                             >
                                 <Check className="w-6 h-6 text-green-600 mb-2" />

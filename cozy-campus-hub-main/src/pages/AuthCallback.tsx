@@ -38,6 +38,21 @@ const uploadPendingAvatar = async (userId: string) => {
     }
 };
 
+const notifyPendingSignup = async (userId: string) => {
+    const rawPayload = localStorage.getItem(`pending_signup_notice_${userId}`);
+    if (!rawPayload) return;
+
+    try {
+        const { error } = await supabase.functions.invoke("send-notification", {
+            body: JSON.parse(rawPayload),
+        });
+        if (error) throw error;
+        localStorage.removeItem(`pending_signup_notice_${userId}`);
+    } catch (err) {
+        console.warn("Pending signup notification failed:", err);
+    }
+};
+
 const AuthCallback = () => {
     const navigate = useNavigate();
     const [status, setStatus] = useState<"loading" | "success" | "error" | "reset_password">("loading");
@@ -58,6 +73,7 @@ const AuthCallback = () => {
             if ((event === "SIGNED_IN" || event === "TOKEN_REFRESHED") && session) {
                 // Upload pending profile photo if stored during signup
                 await uploadPendingAvatar(session.user.id);
+                await notifyPendingSignup(session.user.id);
                 // Sign out so student goes through normal login
                 await supabase.auth.signOut();
                 setStatus("success");
@@ -158,6 +174,7 @@ const AuthCallback = () => {
                                     onChange={(e) => setNewPassword(e.target.value)}
                                     required
                                     minLength={6}
+                                    autoComplete="new-password"
                                     autoFocus
                                 />
                                 <button
