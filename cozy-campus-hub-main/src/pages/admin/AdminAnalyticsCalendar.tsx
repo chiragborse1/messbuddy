@@ -51,6 +51,10 @@ interface DayStats {
 }
 
 const currency = new Intl.NumberFormat("en-IN");
+const compactCurrency = new Intl.NumberFormat("en-IN", {
+  notation: "compact",
+  maximumFractionDigits: 1,
+});
 
 const weekdayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -269,8 +273,8 @@ const AdminAnalyticsCalendar = () => {
   return (
     <>
       <PageShell
-        title="Revenue Calendar"
-        subtitle="Tap any date to expand daily payment stats"
+        title="Calendar"
+        subtitle="Revenue by day"
         action={
           <Button variant="ghost" size="sm" onClick={() => navigate("/admin/analytics")}>
             <ArrowLeft className="w-4 h-4" />
@@ -278,71 +282,92 @@ const AdminAnalyticsCalendar = () => {
           </Button>
         }
       >
-        <div className="pb-24 space-y-5">
-          <section className="bg-gradient-to-br from-primary/10 to-primary/5 rounded-2xl p-5 border border-primary/20 shadow-sm">
-            <div className="flex items-center justify-between gap-3 mb-4">
+        <div className="pb-24 space-y-4">
+          <section className="rounded-[28px] bg-card border border-border/60 shadow-sm p-4">
+            <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">{monthLabel}</p>
-                <h2 className="text-3xl font-bold text-primary">₹{currency.format(monthSummary.approvedRevenue)}</h2>
+                <p className="text-xs font-semibold text-red-500 dark:text-red-400">This month</p>
+                <h2 className="text-3xl font-bold tracking-tight">₹{currency.format(monthSummary.approvedRevenue)}</h2>
+                <p className="text-xs text-muted-foreground mt-0.5">{monthSummary.totalPayments} payment records</p>
               </div>
-              <div className="w-11 h-11 rounded-full bg-primary/15 flex items-center justify-center">
-                <CalendarDays className="w-5 h-5 text-primary" />
+              <div className="w-11 h-11 rounded-full bg-red-50 text-red-500 flex items-center justify-center dark:bg-red-950/50 dark:text-red-300">
+                <CalendarDays className="w-5 h-5" />
               </div>
             </div>
-            <div className="grid grid-cols-3 gap-2">
-              <div className="rounded-xl bg-background/70 border border-border/50 p-3">
-                <p className="text-[11px] text-muted-foreground">Approved</p>
-                <p className="font-bold">{monthSummary.approvedCount}</p>
+
+            <div className="grid grid-cols-3 divide-x divide-border/70 mt-4 rounded-2xl bg-muted/30 border border-border/50 overflow-hidden">
+              <div className="p-3">
+                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Approved</p>
+                <p className="font-semibold">{monthSummary.approvedCount}</p>
               </div>
-              <div className="rounded-xl bg-background/70 border border-border/50 p-3">
-                <p className="text-[11px] text-muted-foreground">Pending</p>
-                <p className="font-bold">{monthSummary.pendingCount}</p>
+              <div className="p-3">
+                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Pending</p>
+                <p className="font-semibold">{monthSummary.pendingCount}</p>
               </div>
-              <div className="rounded-xl bg-background/70 border border-border/50 p-3">
-                <p className="text-[11px] text-muted-foreground">Total</p>
-                <p className="font-bold">{monthSummary.totalPayments}</p>
+              <div className="p-3">
+                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Rejected</p>
+                <p className="font-semibold">{monthSummary.rejectedCount}</p>
               </div>
             </div>
           </section>
 
-          <section className="bg-card rounded-2xl border border-border/50 shadow-sm p-4">
-            <div className="flex items-center justify-between gap-2 mb-4">
-              <Button variant="outline" size="icon" onClick={() => changeMonth(-1)} aria-label="Previous month">
-                <ChevronLeft className="w-4 h-4" />
-              </Button>
+          <section className="bg-card rounded-[28px] border border-border/60 shadow-sm overflow-hidden">
+            <div className="flex items-center justify-between gap-2 px-4 pt-4 pb-3">
+              <button
+                type="button"
+                onClick={handleToday}
+                className="h-9 px-3 rounded-full text-sm font-semibold text-red-500 hover:bg-red-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/40 dark:text-red-400 dark:hover:bg-red-950/40"
+              >
+                Today
+              </button>
               <div className="text-center">
-                <h3 className="font-bold">{monthLabel}</h3>
-                <button type="button" onClick={handleToday} className="text-xs text-primary font-semibold">
-                  Today
+                <h3 className="text-xl font-bold tracking-tight">{monthLabel}</h3>
+              </div>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => changeMonth(-1)}
+                  aria-label="Previous month"
+                  className="h-9 w-9 rounded-full text-red-500 hover:bg-red-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/40 dark:text-red-400 dark:hover:bg-red-950/40"
+                >
+                  <ChevronLeft className="w-5 h-5 mx-auto" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => changeMonth(1)}
+                  aria-label="Next month"
+                  className="h-9 w-9 rounded-full text-red-500 hover:bg-red-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/40 dark:text-red-400 dark:hover:bg-red-950/40"
+                >
+                  <ChevronRight className="w-5 h-5 mx-auto" />
                 </button>
               </div>
-              <Button variant="outline" size="icon" onClick={() => changeMonth(1)} aria-label="Next month">
-                <ChevronRight className="w-4 h-4" />
-              </Button>
             </div>
 
             {errorMessage && (
-              <div className="mb-4 rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive flex gap-2">
+              <div className="mx-4 mb-3 rounded-2xl border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive flex gap-2">
                 <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
                 <span>{errorMessage}</span>
               </div>
             )}
 
-            <div className="grid grid-cols-7 gap-1.5 mb-2">
+            <div className="grid grid-cols-7 px-3 py-2 border-y border-border/60 bg-muted/20">
               {weekdayLabels.map((day) => (
-                <div key={day} className="h-7 flex items-center justify-center text-[11px] font-semibold text-muted-foreground">
+                <div key={day} className="h-6 flex items-center justify-center text-[10px] font-semibold text-muted-foreground">
                   {day}
                 </div>
               ))}
             </div>
 
-            <div className="grid grid-cols-7 gap-1.5">
+            <div className="grid grid-cols-7 px-3 py-3">
               {calendarDays.map((date) => {
                 const key = formatDateKey(date);
                 const stats = dailyStatsByKey.get(key);
                 const inVisibleMonth = isSameMonth(date, visibleMonth);
                 const selected = isSameDay(date, selectedDate);
                 const isToday = isSameDay(date, today);
+                const hasApproved = Boolean(stats?.approvedCount);
+                const hasPending = Boolean(stats?.pendingCount);
+                const hasRejected = Boolean(stats?.rejectedCount);
 
                 return (
                   <button
@@ -350,88 +375,99 @@ const AdminAnalyticsCalendar = () => {
                     type="button"
                     onClick={() => handleSelectDate(date)}
                     className={cn(
-                      "min-h-[72px] rounded-xl border p-1.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                      inVisibleMonth ? "bg-background border-border/60" : "bg-muted/20 border-border/30 opacity-50",
-                      selected && "border-primary bg-primary/10 ring-1 ring-primary/30",
-                      !selected && stats?.totalCount && "hover:border-primary/30 hover:bg-primary/5",
+                      "min-h-[62px] px-1 py-1.5 flex flex-col items-center rounded-2xl transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/40 focus-visible:ring-offset-2",
+                      inVisibleMonth ? "text-foreground" : "text-muted-foreground/40",
+                      !selected && "hover:bg-muted/40",
+                      selected && "bg-red-50 dark:bg-red-950/30",
                     )}
                     aria-label={`${formatReadableDate(date)}${stats?.totalCount ? `, ${stats.totalCount} payments` : ""}`}
                   >
-                    <div className="flex items-center justify-between gap-1">
-                      <span
-                        className={cn(
-                          "w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold",
-                          isToday && "bg-primary text-primary-foreground",
-                          selected && !isToday && "text-primary",
-                        )}
-                      >
-                        {date.getDate()}
-                      </span>
-                      {stats?.totalCount ? <span className="w-1.5 h-1.5 rounded-full bg-primary" /> : null}
+                    <span
+                      className={cn(
+                        "w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold",
+                        selected && "bg-red-500 text-white shadow-sm shadow-red-500/20",
+                        isToday && !selected && "border border-red-500 text-red-500 dark:border-red-400 dark:text-red-400",
+                      )}
+                    >
+                      {date.getDate()}
+                    </span>
+                    <div className="h-2.5 mt-1 flex items-center justify-center gap-0.5">
+                      {hasApproved && <span className="w-1.5 h-1.5 rounded-full bg-green-500" />}
+                      {hasPending && <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />}
+                      {hasRejected && <span className="w-1.5 h-1.5 rounded-full bg-red-500" />}
                     </div>
-                    {stats?.approvedRevenue ? (
-                      <p className="mt-2 text-[10px] font-bold text-green-600 dark:text-green-400 truncate">
-                        ₹{currency.format(stats.approvedRevenue)}
-                      </p>
-                    ) : (
-                      <p className="mt-2 text-[10px] text-muted-foreground/50">No rev.</p>
-                    )}
-                    {stats?.totalCount ? (
-                      <p className="text-[10px] text-muted-foreground truncate">{stats.totalCount} payment{stats.totalCount === 1 ? "" : "s"}</p>
-                    ) : null}
+                    <span
+                      className={cn(
+                        "text-[9px] leading-none font-semibold text-muted-foreground truncate max-w-full",
+                        stats?.approvedRevenue && "text-green-600 dark:text-green-400",
+                      )}
+                    >
+                      {stats?.approvedRevenue ? `₹${compactCurrency.format(stats.approvedRevenue)}` : ""}
+                    </span>
                   </button>
                 );
               })}
             </div>
 
             {loading && (
-              <div className="mt-4 rounded-xl border border-border/50 bg-muted/30 p-3 text-sm text-muted-foreground flex items-center gap-2">
+              <div className="mx-4 mb-4 rounded-2xl border border-border/50 bg-muted/30 p-3 text-sm text-muted-foreground flex items-center gap-2">
                 <Loader2 className="w-4 h-4 animate-spin" />
                 Loading month stats
               </div>
             )}
           </section>
 
-          <section className="bg-card rounded-2xl border border-border/50 shadow-sm overflow-hidden">
-            <div className="p-4 border-b border-border/60">
-              <p className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">Selected Day</p>
-              <h3 className="text-lg font-bold">{formatReadableDate(selectedDate)}</h3>
+          <section className="bg-card rounded-[28px] border border-border/60 shadow-sm overflow-hidden">
+            <div className="p-4 border-b border-border/60 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-12 h-12 rounded-2xl bg-red-500 text-white flex flex-col items-center justify-center shrink-0 shadow-sm shadow-red-500/20">
+                  <span className="text-[10px] uppercase leading-none">
+                    {selectedDate.toLocaleDateString("en-IN", { weekday: "short" })}
+                  </span>
+                  <span className="text-xl font-bold leading-none">{selectedDate.getDate()}</span>
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-muted-foreground">Selected day</p>
+                  <h3 className="text-lg font-bold truncate">{formatReadableDate(selectedDate)}</h3>
+                </div>
+              </div>
+              <p className="text-xl font-bold shrink-0">₹{compactCurrency.format(selectedStats.approvedRevenue)}</p>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 p-4">
-              <div className="rounded-xl bg-green-50 border border-green-100 p-3 dark:bg-green-950/40 dark:border-green-900">
-                <div className="flex items-center gap-2 text-green-700 dark:text-green-300 mb-1">
+            <div className="grid grid-cols-4 divide-x divide-border/70 border-b border-border/60 bg-muted/20">
+              <div className="p-3">
+                <div className="flex items-center gap-1.5 text-green-700 dark:text-green-300 mb-1">
                   <IndianRupee className="w-4 h-4" />
-                  <p className="text-xs font-semibold">Revenue</p>
+                  <p className="text-[10px] font-semibold">Rev.</p>
                 </div>
-                <p className="text-xl font-bold">₹{currency.format(selectedStats.approvedRevenue)}</p>
+                <p className="text-sm font-bold">₹{compactCurrency.format(selectedStats.approvedRevenue)}</p>
               </div>
-              <div className="rounded-xl bg-muted/40 border border-border/60 p-3">
-                <div className="flex items-center gap-2 text-muted-foreground mb-1">
+              <div className="p-3">
+                <div className="flex items-center gap-1.5 text-muted-foreground mb-1">
                   <ReceiptText className="w-4 h-4" />
-                  <p className="text-xs font-semibold">Payments</p>
+                  <p className="text-[10px] font-semibold">Pay</p>
                 </div>
-                <p className="text-xl font-bold">{selectedStats.totalCount}</p>
+                <p className="text-sm font-bold">{selectedStats.totalCount}</p>
               </div>
-              <div className="rounded-xl bg-amber-50 border border-amber-100 p-3 dark:bg-amber-950/40 dark:border-amber-900">
-                <div className="flex items-center gap-2 text-amber-700 dark:text-amber-300 mb-1">
+              <div className="p-3">
+                <div className="flex items-center gap-1.5 text-amber-700 dark:text-amber-300 mb-1">
                   <Clock className="w-4 h-4" />
-                  <p className="text-xs font-semibold">Pending</p>
+                  <p className="text-[10px] font-semibold">Pend.</p>
                 </div>
-                <p className="text-xl font-bold">₹{currency.format(selectedStats.pendingAmount)}</p>
+                <p className="text-sm font-bold">₹{compactCurrency.format(selectedStats.pendingAmount)}</p>
               </div>
-              <div className="rounded-xl bg-red-50 border border-red-100 p-3 dark:bg-red-950/40 dark:border-red-900">
-                <div className="flex items-center gap-2 text-red-700 dark:text-red-300 mb-1">
+              <div className="p-3">
+                <div className="flex items-center gap-1.5 text-red-700 dark:text-red-300 mb-1">
                   <XCircle className="w-4 h-4" />
-                  <p className="text-xs font-semibold">Rejected</p>
+                  <p className="text-[10px] font-semibold">Reject</p>
                 </div>
-                <p className="text-xl font-bold">{selectedStats.rejectedCount}</p>
+                <p className="text-sm font-bold">{selectedStats.rejectedCount}</p>
               </div>
             </div>
 
-            <div className="px-4 pb-4 space-y-3">
+            <div className="px-4 py-2">
               {selectedStats.payments.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-border p-5 text-center text-sm text-muted-foreground">
+                <div className="py-8 text-center text-sm text-muted-foreground">
                   No payments recorded for this date.
                 </div>
               ) : (
@@ -440,27 +476,37 @@ const AdminAnalyticsCalendar = () => {
                   const status = payment.status ?? "unknown";
 
                   return (
-                    <div key={payment.id} className="rounded-xl border border-border/60 bg-background p-3">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="font-semibold truncate">{profile?.name || "Unknown Student"}</p>
-                          <p className="text-xs text-muted-foreground truncate">{payment.plan_name || "No plan"} • {formatTime(payment.created_at)}</p>
+                    <div key={payment.id} className="flex gap-3 py-3 border-b border-border/60 last:border-b-0">
+                      <div
+                        className={cn(
+                          "w-1.5 rounded-full shrink-0",
+                          status === "approved" && "bg-green-500",
+                          status === "pending" && "bg-amber-500",
+                          status === "rejected" && "bg-red-500",
+                          !["approved", "pending", "rejected"].includes(status) && "bg-muted-foreground/40",
+                        )}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="font-semibold truncate">{profile?.name || "Unknown Student"}</p>
+                            <p className="text-xs text-muted-foreground truncate">
+                              {formatTime(payment.created_at)} • {payment.plan_name || "No plan"}
+                            </p>
+                          </div>
+                          <p className="font-bold shrink-0">₹{currency.format(Number(payment.amount) || 0)}</p>
                         </div>
-                        <Badge variant="outline" className={cn("capitalize shrink-0", getStatusBadgeClass(status))}>
-                          {status === "approved" ? <CheckCircle2 className="w-3 h-3 mr-1" /> : null}
-                          {status}
-                        </Badge>
-                      </div>
-                      <div className="flex items-end justify-between gap-3 mt-3 pt-3 border-t border-border/50">
-                        <div className="min-w-0">
-                          <p className="text-[11px] text-muted-foreground">Amount</p>
-                          <p className="font-bold">₹{currency.format(Number(payment.amount) || 0)}</p>
+                        <div className="flex items-center justify-between gap-3 mt-2">
+                          <Badge variant="outline" className={cn("capitalize shrink-0", getStatusBadgeClass(status))}>
+                            {status === "approved" ? <CheckCircle2 className="w-3 h-3 mr-1" /> : null}
+                            {status}
+                          </Badge>
+                          {payment.transaction_id ? (
+                            <p className="text-[11px] font-mono text-muted-foreground truncate text-right">
+                              {payment.transaction_id}
+                            </p>
+                          ) : null}
                         </div>
-                        {payment.transaction_id ? (
-                          <p className="text-[11px] font-mono text-muted-foreground truncate text-right max-w-[45%]">
-                            {payment.transaction_id}
-                          </p>
-                        ) : null}
                       </div>
                     </div>
                   );
