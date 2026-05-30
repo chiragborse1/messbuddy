@@ -45,6 +45,7 @@ Current function directories in this checkout:
 - `payment-reminder` - admin-protected reminder job for expiring plans and pending balances. It invokes `send-notification` for push delivery and can use an email provider secret for reminders.
 - `send-notification` - admin/developer-protected Firebase Cloud Messaging sender for student/admin notifications.
 - `delete-student` - admin/developer-protected permanent student deletion flow that cleans related data and removes the Supabase Auth user.
+- `cleanup-chat` - admin/developer-protected cleanup flow for 24-hour chat expiry, full admin chat clearing, and chat image object cleanup.
 
 Deploy commands:
 
@@ -52,6 +53,7 @@ Deploy commands:
 supabase functions deploy payment-reminder
 supabase functions deploy send-notification
 supabase functions deploy delete-student
+supabase functions deploy cleanup-chat
 ```
 
 ## Live Deployment Prerequisites

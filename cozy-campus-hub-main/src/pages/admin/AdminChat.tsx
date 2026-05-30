@@ -75,13 +75,9 @@ const AdminChat = () => {
         if (!user) return;
 
         const cleanupOldMessages = async () => {
-            const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-
-            // Delete messages older than 24h
-            const { error } = await supabase
-                .from('messages')
-                .delete()
-                .lt('created_at', twentyFourHoursAgo);
+            const { error } = await supabase.functions.invoke('cleanup-chat', {
+                body: { mode: 'old' },
+            });
 
             if (error) {
                 console.error("Auto-cleanup failed:", error);
@@ -182,12 +178,9 @@ const AdminChat = () => {
 
     const handleClearChat = async () => {
         setClearLoading(true);
-        // Delete all messages. We use a filter like created_at > 1970 to match all rows
-        // because supabase client usually requires a filter for delete operations.
-        const { error } = await supabase
-            .from('messages')
-            .delete()
-            .gt('created_at', '1970-01-01');
+        const { error } = await supabase.functions.invoke('cleanup-chat', {
+            body: { mode: 'all' },
+        });
 
         if (error) {
             toast({ title: "Failed to clear chat", description: error.message, variant: "destructive" });

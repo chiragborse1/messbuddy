@@ -65,6 +65,7 @@ Deploy Edge Functions:
 supabase functions deploy payment-reminder
 supabase functions deploy send-notification
 supabase functions deploy delete-student
+supabase functions deploy cleanup-chat
 ```
 
 Current function directories in this repo:
@@ -72,6 +73,7 @@ Current function directories in this repo:
 - `payment-reminder`
 - `send-notification`
 - `delete-student`
+- `cleanup-chat`
 
 See [SUPABASE_SETUP.md](./SUPABASE_SETUP.md) for deployment prerequisites and function notes.
 
