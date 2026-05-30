@@ -547,6 +547,7 @@ const AdminStudents = () => {
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
+                                e.currentTarget.blur();
                                 handleOpenAdjustment(s);
                               }}
                               className="px-2 py-0.5 rounded bg-primary/10 text-primary text-[10px] font-bold hover:bg-primary/20 transition-colors"

@@ -25,6 +25,7 @@ Current migration:
 - `20260530184000_active_student_access_guards.sql` - blocks inactive student accounts from student data APIs and voting.
 - `20260530184500_admin_revenue_rpcs.sql` - moves admin revenue aggregation into Postgres RPCs.
 - `20260530185000_add_profile_on_leave.sql` - adds the `profiles.on_leave` flag used by leave approvals.
+- `20260530185500_add_optional_media_columns.sql` - adds optional payment transaction IDs and menu item image URLs used by the app.
 
 Apply migrations to the linked Supabase project:
 
