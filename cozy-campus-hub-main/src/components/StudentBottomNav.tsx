@@ -17,12 +17,14 @@ const StudentBottomNav = () => {
     <nav className="fixed bottom-0 left-0 right-0 z-50 bg-card border-t border-border/60 px-2 pb-[env(safe-area-inset-bottom)]">
       <div className="flex items-center justify-around max-w-lg mx-auto">
         {tabs.map((tab) => {
-          const isActive = location.pathname === tab.path;
+          const isActive = location.pathname === tab.path || location.pathname.startsWith(`${tab.path}/`);
           return (
             <button
               key={tab.path}
+              type="button"
+              aria-current={isActive ? "page" : undefined}
               onClick={() => navigate(tab.path)}
-              className={`flex flex-col items-center gap-0.5 py-2.5 px-3 transition-colors ${isActive
+              className={`flex flex-col items-center gap-0.5 rounded-2xl py-2.5 px-3 transition-colors outline-none [-webkit-tap-highlight-color:transparent] focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-2 focus-visible:ring-offset-card active:bg-muted/50 ${isActive
                   ? "text-primary"
                   : "text-muted-foreground hover:text-foreground"
                 }`}
