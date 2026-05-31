@@ -1,0 +1,14 @@
+{
+  "appId": "com.chirag.messbuddy",
+  "platform": "android",
+  "versionName": "1.0.0",
+  "versionCode": 1,
+  "minimumSupportedVersionCode": 1,
+  "downloadUrl": "https://github.com/chiragborse1/messbuddy/releases/download/android-v1.0.0/kanhaiya-mess-v1.0.0.apk",
+  "sha256": "",
+  "sizeBytes": null,
+  "releasedAt": "2026-05-31T00:00:00.000Z",
+  "releaseNotes": [
+    "Initial sideload APK release."
+  ]
+}

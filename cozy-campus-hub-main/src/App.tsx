@@ -8,6 +8,7 @@ import { UserProvider } from "@/contexts/UserContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 import ProtectedRoute from "@/components/ProtectedRoute";
+import { AppUpdatePrompt } from "@/components/AppUpdatePrompt";
 
 // Page Imports
 import LoginPage from "./pages/LoginPage";
@@ -56,6 +57,7 @@ const AppWithNotifications = () => {
     <TooltipProvider>
       <Toaster />
       <Sonner />
+      <AppUpdatePrompt />
       <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <Routes>
           <Route path="/" element={<LandingPage />} />

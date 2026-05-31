@@ -1,7 +1,7 @@
 {
   "name": "vite_react_shadcn_ts",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -13,12 +13,16 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "android:sync": "npm run build && npx cap sync android",
+    "android:build:release": "npm run android:sync && cd android && ./gradlew assembleRelease",
+    "android:package": "node scripts/android-release.mjs",
+    "android:release": "npm run android:build:release && npm run android:package",
     "android:open": "npx cap open android",
     "android:doctor": "npx cap doctor android"
   },
   "dependencies": {
     "@capacitor/android": "^8.1.0",
     "@capacitor/app": "^8.0.1",
+    "@capacitor/browser": "^8.0.3",
     "@capacitor/cli": "^8.1.0",
     "@capacitor/core": "^8.1.0",
     "@capacitor/preferences": "^8.0.1",

@@ -25,6 +25,12 @@ dist-ssr
 .env
 .env.*
 
+# Android release signing and generated APK packages
+android/keystore.properties
+android/app/*.jks
+android/app/*.keystore
+release/
+
 # Local secret upload helpers / downloaded service-account keys
 upload_secret.js
 *service-account*.json

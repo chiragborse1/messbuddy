@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Kanhaiya Mess APK</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: #f7f7f2;
+        color: #181914;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+      }
+
+      main {
+        width: min(100%, 460px);
+        border: 1px solid rgba(24, 25, 20, 0.12);
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.92);
+        box-shadow: 0 20px 60px rgba(24, 25, 20, 0.12);
+        padding: 28px;
+      }
+
+      .brand {
+        display: flex;
+        gap: 14px;
+        align-items: center;
+        margin-bottom: 22px;
+      }
+
+      .brand img {
+        width: 54px;
+        height: 54px;
+        border-radius: 12px;
+        object-fit: cover;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 1.55rem;
+        line-height: 1.2;
+      }
+
+      p {
+        margin: 8px 0 0;
+        color: #5c5f53;
+        line-height: 1.55;
+      }
+
+      .version {
+        display: grid;
+        gap: 8px;
+        margin: 22px 0;
+        padding: 16px;
+        border-radius: 10px;
+        background: #f0f3e8;
+        font-size: 0.95rem;
+      }
+
+      .version span {
+        color: #5c5f53;
+      }
+
+      .checksum {
+        overflow-wrap: anywhere;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+        font-size: 0.8rem;
+      }
+
+      a.button {
+        display: inline-flex;
+        width: 100%;
+        min-height: 48px;
+        align-items: center;
+        justify-content: center;
+        border-radius: 10px;
+        background: #1f6f43;
+        color: #ffffff;
+        font-weight: 700;
+        text-decoration: none;
+      }
+
+      a.button[aria-disabled="true"] {
+        pointer-events: none;
+        opacity: 0.55;
+      }
+
+      .note {
+        margin-top: 16px;
+        font-size: 0.9rem;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root {
+          background: #151711;
+          color: #f6f7ef;
+        }
+
+        main {
+          border-color: rgba(246, 247, 239, 0.12);
+          background: rgba(29, 32, 24, 0.94);
+        }
+
+        p,
+        .version span {
+          color: #c5cbb8;
+        }
+
+        .version {
+          background: #252a1e;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="brand">
+        <img src="/Krishna%20Logo.png" alt="" />
+        <div>
+          <h1>Kanhaiya Mess APK</h1>
+          <p>Direct Android installer for students and admins.</p>
+        </div>
+      </div>
+
+      <div class="version">
+        <div><strong>Latest version:</strong> <span id="version">Loading...</span></div>
+        <div><strong>Released:</strong> <span id="released">Loading...</span></div>
+        <div><strong>SHA-256:</strong> <span id="checksum" class="checksum">Loading...</span></div>
+      </div>
+
+      <a id="download" class="button" href="#" aria-disabled="true">Download APK</a>
+      <p class="note">Install only the APK shared from this page or the official GitHub release. Android will ask you to allow installs from your browser or file manager.</p>
+    </main>
+
+    <script>
+      const version = document.getElementById("version");
+      const released = document.getElementById("released");
+      const checksum = document.getElementById("checksum");
+      const download = document.getElementById("download");
+
+      fetch("/releases/latest.json", { cache: "no-store" })
+        .then((response) => {
+          if (!response.ok) throw new Error("Release manifest unavailable");
+          return response.json();
+        })
+        .then((manifest) => {
+          version.textContent = `${manifest.versionName} (${manifest.versionCode})`;
+          released.textContent = manifest.releasedAt ? new Date(manifest.releasedAt).toLocaleDateString() : "Not published yet";
+          checksum.textContent = manifest.sha256 || "Pending first signed APK";
+          if (manifest.downloadUrl) {
+            download.href = manifest.downloadUrl;
+            download.removeAttribute("aria-disabled");
+          }
+        })
+        .catch(() => {
+          version.textContent = "Unavailable";
+          released.textContent = "Unavailable";
+          checksum.textContent = "Unavailable";
+        });
+    </script>
+  </body>
+</html>

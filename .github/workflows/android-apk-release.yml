@@ -1,0 +1,118 @@
+name: Android APK Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: GitHub release tag for the APK
+        required: true
+        default: android-v1.0.0
+      release_notes:
+        description: Notes shown in GitHub Releases and the in-app update manifest
+        required: true
+        default: Initial sideload APK release.
+
+permissions:
+  contents: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  build-signed-apk:
+    name: Build signed APK
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: cozy-campus-hub-main
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: cozy-campus-hub-main/package-lock.json
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Write Android signing files
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          test -n "$ANDROID_KEYSTORE_BASE64"
+          test -n "$ANDROID_KEYSTORE_PASSWORD"
+          test -n "$ANDROID_KEY_ALIAS"
+          test -n "$ANDROID_KEY_PASSWORD"
+          printf "%s" "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/kanhaiya-mess-release.jks
+          {
+            printf "storeFile=app/kanhaiya-mess-release.jks\n"
+            printf "storePassword=%s\n" "$ANDROID_KEYSTORE_PASSWORD"
+            printf "keyAlias=%s\n" "$ANDROID_KEY_ALIAS"
+            printf "keyPassword=%s\n" "$ANDROID_KEY_PASSWORD"
+          } > android/keystore.properties
+
+      - name: Build signed release APK
+        run: npm run android:build:release
+
+      - name: Package APK and update release manifest
+        env:
+          APK_RELEASE_TAG: ${{ inputs.tag }}
+          APK_RELEASE_NOTES: ${{ inputs.release_notes }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: npm run android:package
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: kanhaiya-mess-${{ inputs.tag }}
+          path: |
+            cozy-campus-hub-main/release/*.apk
+            cozy-campus-hub-main/release/*.sha256
+          if-no-files-found: error
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          RELEASE_NOTES: ${{ inputs.release_notes }}
+        run: |
+          set -euo pipefail
+          apk_file="$(ls release/kanhaiya-mess-v*.apk | head -n 1)"
+          checksum_file="${apk_file}.sha256"
+          printf "%s\n" "$RELEASE_NOTES" > /tmp/android-release-notes.md
+
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" "$apk_file" "$checksum_file" --clobber
+          else
+            gh release create "$RELEASE_TAG" "$apk_file" "$checksum_file" \
+              --title "Kanhaiya Mess ${RELEASE_TAG#android-v}" \
+              --notes-file /tmp/android-release-notes.md
+          fi
+
+      - name: Commit release manifest
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public/releases/latest.json
+          if git diff --cached --quiet; then
+            echo "Release manifest already current."
+          else
+            git commit -m "Update Android release manifest"
+            git push
+          fi
