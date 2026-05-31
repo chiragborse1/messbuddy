@@ -18,7 +18,6 @@ const StudentFeedback = () => {
     const [submitting, setSubmitting] = useState(false);
 
     if (!user) {
-        navigate("/");
         return null;
     }
 

@@ -73,7 +73,6 @@ const StudentDashboard = () => {
   }, [refetch]);
 
   if (!user) {
-    navigate("/");
     return null;
   }
 

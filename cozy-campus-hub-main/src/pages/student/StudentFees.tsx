@@ -11,6 +11,7 @@ import { MessReceiptTicket } from "@/components/ui/ticket-confirmation-card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { mapMembershipPlanRecord, MessPlan, MESS_PLANS } from "@/lib/plans";
 import { validateImageFile } from "@/lib/uploads";
+import { getPaymentReceiptUrl } from "@/lib/storage";
 
 const StudentFees = () => {
   const { user } = useUser();
@@ -20,6 +21,7 @@ const StudentFees = () => {
   const [myPayments, setMyPayments] = useState<any[]>([]);
   const [plans, setPlans] = useState<MessPlan[]>([...MESS_PLANS]);
   const [receiptPayment, setReceiptPayment] = useState<any | null>(null);
+  const [receiptScreenshotUrl, setReceiptScreenshotUrl] = useState<string | null>(null);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [isPartialPayment, setIsPartialPayment] = useState(false);
   const [partialAmount, setPartialAmount] = useState("");
@@ -144,12 +146,7 @@ const StudentFees = () => {
 
       if (uploadError) throw uploadError;
 
-      // 2. Get Public URL
-      const { data: { publicUrl } } = supabase.storage
-        .from('payment_receipts')
-        .getPublicUrl(fileName);
-
-      // 3. Insert Record
+      // 2. Insert Record. Store the object path, not a public URL.
       const finalAmount = isPartialPayment ? partialPaymentAmount : selectedPlan.price;
       const planLabel = isPartialPayment ? `${selectedPlan.label} (Partial)` : selectedPlan.label;
 
@@ -158,7 +155,7 @@ const StudentFees = () => {
         amount: finalAmount,
         plan_name: planLabel,
         membership_plan_id: selectedPlan.id,
-        screenshot_url: publicUrl,
+        screenshot_url: fileName,
         membership_start_date: startDate,
         status: 'pending'
       }).select('id').single();
@@ -227,6 +224,26 @@ const StudentFees = () => {
 
 
   const pendingPayment = myPayments.find(p => p.status === 'pending');
+
+  useEffect(() => {
+    let active = true;
+
+    const resolveReceiptUrl = async () => {
+      if (!receiptPayment?.screenshot_url) {
+        setReceiptScreenshotUrl(null);
+        return;
+      }
+
+      const url = await getPaymentReceiptUrl(receiptPayment.screenshot_url);
+      if (active) setReceiptScreenshotUrl(url);
+    };
+
+    void resolveReceiptUrl();
+
+    return () => {
+      active = false;
+    };
+  }, [receiptPayment?.screenshot_url]);
 
   return (
     <>
@@ -620,7 +637,7 @@ const StudentFees = () => {
                 studentName={user?.name ?? "Student"}
                 upiId="9359447581@ibl"
                 paymentDate={new Date(receiptPayment.created_at)}
-                screenshotUrl={receiptPayment.screenshot_url}
+                screenshotUrl={receiptScreenshotUrl ?? undefined}
                 showConfetti={true}
               />
             </div>

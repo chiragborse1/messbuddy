@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PaymentSwipeCard } from "@/components/PaymentSwipeCard"; // Ensure this path is correct
 import { AnimatePresence, motion } from "framer-motion";
 import { calculatePaymentPlanUpdate, calculatePaymentRevokeUpdate, MembershipPlanRecord, PlanAudience, PlanDurationType } from "@/lib/plans";
+import { getPaymentReceiptUrl } from "@/lib/storage";
 
 type PaymentConfirmAction =
   | { type: "revoke"; paymentId: number; planName?: string }
@@ -690,62 +691,87 @@ const AdminPayments = () => {
 };
 
 // Sub-component for List Items (Approved/Rejected) to keep code clean
-const PaymentListItem = ({ payment, onDelete, onRevoke, onImageClick, showRevoke = true }: { payment: any, onDelete: (payment: any) => void, onRevoke?: (payment: any) => void, onImageClick?: (url: string) => void, showRevoke?: boolean }) => (
-  <div className="w-full bg-card rounded-xl border border-border/50 p-4 shadow-sm flex items-center justify-between">
-    <div className="flex items-center gap-3 flex-1 min-w-0">
-      {/* Profile Photo */}
-      <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center overflow-hidden shrink-0">
-        {payment.profiles?.photo_url ? (
-          <img src={payment.profiles.photo_url} className="w-full h-full object-cover" />
-        ) : (
-          <ImageIcon className="w-5 h-5 text-muted-foreground" />
-        )}
-      </div>
+const PaymentListItem = ({ payment, onDelete, onRevoke, onImageClick, showRevoke = true }: { payment: any, onDelete: (payment: any) => void, onRevoke?: (payment: any) => void, onImageClick?: (url: string) => void, showRevoke?: boolean }) => {
+  const [receiptUrl, setReceiptUrl] = useState<string | null>(null);
 
-      <div className="flex-1 min-w-0">
-        <p className="font-semibold text-sm truncate">{payment.profiles?.name || "Unknown"}</p>
-        <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
-          <span>{payment.plan_name}</span>
-          <span>•</span>
-          <span>₹{payment.amount}</span>
+  useEffect(() => {
+    let active = true;
+
+    const resolveReceiptUrl = async () => {
+      if (!payment.screenshot_url) {
+        setReceiptUrl(null);
+        return;
+      }
+
+      const url = await getPaymentReceiptUrl(payment.screenshot_url);
+      if (active) setReceiptUrl(url);
+    };
+
+    void resolveReceiptUrl();
+
+    return () => {
+      active = false;
+    };
+  }, [payment.screenshot_url]);
+
+  return (
+    <div className="w-full bg-card rounded-xl border border-border/50 p-4 shadow-sm flex items-center justify-between">
+      <div className="flex items-center gap-3 flex-1 min-w-0">
+        {/* Profile Photo */}
+        <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center overflow-hidden shrink-0">
+          {payment.profiles?.photo_url ? (
+            <img src={payment.profiles.photo_url} className="w-full h-full object-cover" />
+          ) : (
+            <ImageIcon className="w-5 h-5 text-muted-foreground" />
+          )}
         </div>
-        {/* Payment Screenshot Thumbnail Link */}
-        {payment.screenshot_url && (
-          <button
-            onClick={() => onImageClick && onImageClick(payment.screenshot_url)}
-            className="text-[10px] text-blue-500 hover:underline flex items-center gap-1 mt-1"
+
+        <div className="flex-1 min-w-0">
+          <p className="font-semibold text-sm truncate">{payment.profiles?.name || "Unknown"}</p>
+          <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
+            <span>{payment.plan_name}</span>
+            <span>•</span>
+            <span>₹{payment.amount}</span>
+          </div>
+          {/* Payment Screenshot Thumbnail Link */}
+          {payment.screenshot_url && (
+            <button
+              onClick={() => receiptUrl && onImageClick && onImageClick(receiptUrl)}
+              disabled={!receiptUrl}
+              className="text-[10px] text-blue-500 hover:underline flex items-center gap-1 mt-1 disabled:cursor-wait disabled:opacity-60"
+            >
+              <ExternalLink className="w-3 h-3" /> {receiptUrl ? "View Screenshot" : "Loading screenshot"}
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2 shrink-0">
+        {/* <StatusBadge status={payment.status} /> - Optional: Hide badge to save space if needed */}
+        {showRevoke && onRevoke ? (
+          <Button
+            size="sm"
+            variant="destructive"
+            className="h-8 px-3 text-xs"
+            onClick={() => onRevoke(payment)}
+            title="Reject & Revert Days"
           >
-            <ExternalLink className="w-3 h-3" /> View Screenshot
-          </button>
+            Reject
+          </Button>
+        ) : (
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+            onClick={() => onDelete(payment)}
+            title="Delete Record"
+          >
+            <Trash2 className="w-4 h-4" />
+          </Button>
         )}
       </div>
     </div>
-
-    <div className="flex items-center gap-2 shrink-0">
-      {/* <StatusBadge status={payment.status} /> - Optional: Hide badge to save space if needed */}
-      {showRevoke && onRevoke ? (
-        <Button
-          size="sm"
-          variant="destructive"
-          className="h-8 px-3 text-xs"
-          onClick={() => onRevoke(payment)}
-          title="Reject & Revert Days"
-        >
-          Reject
-        </Button>
-      ) : (
-        <Button
-          size="icon"
-          variant="ghost"
-          className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
-          onClick={() => onDelete(payment)}
-          title="Delete Record"
-        >
-          <Trash2 className="w-4 h-4" />
-        </Button>
-      )}
-    </div>
-  </div>
-);
+  );
+};
 
 export default AdminPayments;

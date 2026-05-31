@@ -259,10 +259,11 @@ async function resolveNotificationPayload(
         if (error || !payment) throw new Error("Payment submission not found.")
 
         const profile = Array.isArray(payment.profiles) ? payment.profiles[0] : payment.profiles
+        const receiptImage = await resolveStorageImageUrl(adminClient, 'payment_receipts', payment.screenshot_url)
         return {
             title: "New Payment Submitted!",
             body: `${profile?.name || "A student"} paid ₹${payment.amount} for ${payment.plan_name}. Please verify receipt.`,
-            image: payment.screenshot_url || undefined,
+            image: receiptImage || undefined,
             targetRole: 'admin',
         }
     }
@@ -323,6 +324,50 @@ async function insertNotificationLog(
     } catch (error) {
         console.error("Notification log insert failed:", error instanceof Error ? error.message : "Unknown error")
     }
+}
+
+async function resolveStorageImageUrl(
+    adminClient: ReturnType<typeof createClient>,
+    bucket: string,
+    value: string | null | undefined,
+) {
+    const rawValue = value?.trim()
+    if (!rawValue) return null
+
+    const objectPath = extractStoragePath(rawValue, bucket)
+    if (!objectPath) return /^https?:\/\//i.test(rawValue) ? rawValue : null
+
+    const { data, error } = await adminClient.storage
+        .from(bucket)
+        .createSignedUrl(objectPath, 60 * 15)
+
+    if (!error && data?.signedUrl) return data.signedUrl
+    return /^https?:\/\//i.test(rawValue) ? rawValue : null
+}
+
+function extractStoragePath(rawValue: string, bucket: string) {
+    if (!/^https?:\/\//i.test(rawValue)) {
+        const prefix = `${bucket}/`
+        return rawValue.startsWith(prefix) ? rawValue.slice(prefix.length) : rawValue.replace(/^\/+/, '')
+    }
+
+    try {
+        const url = new URL(rawValue)
+        const decodedPath = decodeURIComponent(url.pathname)
+        const prefixes = [
+            `/storage/v1/object/public/${bucket}/`,
+            `/storage/v1/object/sign/${bucket}/`,
+        ]
+
+        for (const prefix of prefixes) {
+            const index = decodedPath.indexOf(prefix)
+            if (index >= 0) return decodedPath.slice(index + prefix.length)
+        }
+    } catch (_error) {
+        return null
+    }
+
+    return null
 }
 
 async function getGoogleAccessToken(serviceAccount: any) {

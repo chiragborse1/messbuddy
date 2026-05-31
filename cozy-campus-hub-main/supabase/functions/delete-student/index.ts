@@ -176,10 +176,16 @@ async function removeStorageObjects(
 }
 
 function extractStoragePath(rawUrl: string | null | undefined, bucket: string) {
-    if (!rawUrl) return null
+    const rawValue = rawUrl?.trim()
+    if (!rawValue) return null
+
+    if (!/^https?:\/\//i.test(rawValue)) {
+        const prefix = `${bucket}/`
+        return rawValue.startsWith(prefix) ? rawValue.slice(prefix.length) : rawValue.replace(/^\/+/, '')
+    }
 
     try {
-        const url = new URL(rawUrl)
+        const url = new URL(rawValue)
         const publicPrefix = `/storage/v1/object/public/${bucket}/`
         const signedPrefix = `/storage/v1/object/sign/${bucket}/`
         const pathPrefix = url.pathname.includes(publicPrefix) ? publicPrefix : signedPrefix

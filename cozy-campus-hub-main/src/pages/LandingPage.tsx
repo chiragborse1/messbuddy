@@ -1,6 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { useEffect } from "react";
 import { useUser } from "@/hooks/useUser";
+import { hasActiveStudentAccess, hasAdminAccess } from "@/lib/access";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import {
@@ -18,9 +19,9 @@ const LandingPage = () => {
 
     useEffect(() => {
         if (!authLoading && user) {
-            if (user.role === 'admin' || user.role === 'developer') {
+            if (hasAdminAccess(user)) {
                 navigate('/admin', { replace: true });
-            } else if (user.role === 'student' && user.status !== 'pending') {
+            } else if (hasActiveStudentAccess(user)) {
                 navigate('/student', { replace: true });
             } else {
                 navigate('/login', { replace: true });

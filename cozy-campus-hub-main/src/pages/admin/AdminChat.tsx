@@ -55,6 +55,7 @@ const AdminChat = () => {
     const [messages, setMessages] = useState<Message[]>([]);
     const [newMessage, setNewMessage] = useState("");
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
+    const [selectedFilePreviewUrl, setSelectedFilePreviewUrl] = useState<string | null>(null);
     const [isUploading, setIsUploading] = useState(false);
     const [previewImage, setPreviewImage] = useState<string | null>(null);
     const [replyingTo, setReplyingTo] = useState<Message | null>(null);
@@ -92,6 +93,20 @@ const AdminChat = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }, [messages, replyingTo]);
 
+    useEffect(() => {
+        if (!selectedFile) {
+            setSelectedFilePreviewUrl(null);
+            return;
+        }
+
+        const objectUrl = URL.createObjectURL(selectedFile);
+        setSelectedFilePreviewUrl(objectUrl);
+
+        return () => {
+            URL.revokeObjectURL(objectUrl);
+        };
+    }, [selectedFile]);
+
     // Fetch messages
     useEffect(() => {
         if (!user) return;
@@ -115,10 +130,11 @@ const AdminChat = () => {
                         profiles:user_id (name)
                     )
                 `)
-                .order('created_at', { ascending: true });
+                .order('created_at', { ascending: false })
+                .limit(100);
 
             if (data) {
-                setMessages(data.map(normalizeMessage));
+                setMessages(data.map(normalizeMessage).reverse());
             } else if (error) {
                 console.error("Error fetching messages:", error);
             }
@@ -158,7 +174,7 @@ const AdminChat = () => {
                     }
 
                     if (fullMessageData) {
-                        setMessages((prev) => [...prev, normalizeMessage(fullMessageData)]);
+                        setMessages((prev) => [...prev, normalizeMessage(fullMessageData)].slice(-100));
                     }
                 }
             )
@@ -416,10 +432,10 @@ const AdminChat = () => {
                             </div>
                         )}
 
-                        {selectedFile && (
+                        {selectedFile && selectedFilePreviewUrl && (
                             <div className="flex items-center gap-2 m-2 mx-4 p-2 bg-muted/50 rounded-lg w-fit animate-in slide-in-from-bottom-2">
                                 <div className="w-10 h-10 rounded overflow-hidden">
-                                    <img src={URL.createObjectURL(selectedFile)} alt="Preview" className="w-full h-full object-cover" />
+                                    <img src={selectedFilePreviewUrl} alt="Preview" className="w-full h-full object-cover" />
                                 </div>
                                 <div className="flex flex-col">
                                     <span className="text-xs truncate max-w-[150px] font-medium">{selectedFile.name}</span>

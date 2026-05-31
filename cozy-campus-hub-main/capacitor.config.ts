@@ -16,9 +16,6 @@ const config: CapacitorConfig = {
     */
 
     android: {
-        buildOptions: {
-            releaseType: 'APK',
-        },
         // WebView performance optimizations
         allowMixedContent: false,
         captureInput: true,

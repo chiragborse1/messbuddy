@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import PageShell from "@/components/PageShell";
 import AdminBottomNav from "@/components/AdminBottomNav";
 import { Button } from "@/components/ui/button";
@@ -85,6 +85,7 @@ const AdminMenu = () => {
   const [newItems, setNewItems] = useState<Record<MealType, string>>(initialNewItems);
   const [selectedCatalogIds, setSelectedCatalogIds] = useState<Record<MealType, string>>(initialSelectedCatalogIds);
   const [editingItem, setEditingItem] = useState<EditingItemState | null>(null);
+  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const groupedItems = useMemo(() => splitMenuItemsByMeal(sessionItems), [sessionItems]);
   const canManageItems = session?.status === "draft" || session?.status === "closed";
@@ -199,6 +200,13 @@ const AdminMenu = () => {
     }
   }, [applyMenuData, ensureSession, loadCatalog, loadSessionItems, selectedDate]);
 
+  const scheduleSilentRefresh = useCallback((serviceDate: string) => {
+    if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
+    refreshTimerRef.current = setTimeout(() => {
+      void fetchMenu(serviceDate, true);
+    }, 250);
+  }, [fetchMenu]);
+
   useEffect(() => {
     setExpandedItemId(null);
     setVoters([]);
@@ -207,16 +215,17 @@ const AdminMenu = () => {
 
     const channel = supabase
       .channel(`admin_menu_sessions_${selectedDate}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "menu_sessions" }, () => fetchMenu(selectedDate, true))
-      .on("postgres_changes", { event: "*", schema: "public", table: "menu_session_items" }, () => fetchMenu(selectedDate, true))
-      .on("postgres_changes", { event: "*", schema: "public", table: "menu_votes" }, () => fetchMenu(selectedDate, true))
-      .on("postgres_changes", { event: "*", schema: "public", table: "menu_items" }, () => fetchMenu(selectedDate, true))
+      .on("postgres_changes", { event: "*", schema: "public", table: "menu_sessions" }, () => scheduleSilentRefresh(selectedDate))
+      .on("postgres_changes", { event: "*", schema: "public", table: "menu_session_items" }, () => scheduleSilentRefresh(selectedDate))
+      .on("postgres_changes", { event: "*", schema: "public", table: "menu_votes" }, () => scheduleSilentRefresh(selectedDate))
+      .on("postgres_changes", { event: "*", schema: "public", table: "menu_items" }, () => scheduleSilentRefresh(selectedDate))
       .subscribe();
 
     return () => {
+      if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
       supabase.removeChannel(channel);
     };
-  }, [fetchMenu, selectedDate]);
+  }, [fetchMenu, scheduleSilentRefresh, selectedDate]);
 
   const fetchVoters = async (sessionItemId: number) => {
     setLoadingVoters(true);

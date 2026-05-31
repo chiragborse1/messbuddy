@@ -1,8 +1,9 @@
-import { motion, useMotionValue, useTransform, useAnimation, PanInfo } from "framer-motion";
+import { motion, useMotionValue, useTransform, PanInfo } from "framer-motion";
 import { Check, X, ExternalLink, User } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { calculatePlanEndDate } from "@/lib/plans";
+import { getPaymentReceiptUrl } from "@/lib/storage";
 
 interface PaymentSwipeCardProps {
     payment: any;
@@ -14,6 +15,7 @@ interface PaymentSwipeCardProps {
 
 export const PaymentSwipeCard = ({ payment, onSwipe, onImageClick, className, style }: PaymentSwipeCardProps) => {
     const [exitX, setExitX] = useState<number | null>(null);
+    const [receiptUrl, setReceiptUrl] = useState<string | null>(null);
     const x = useMotionValue(0);
     const scale = useTransform(x, [-150, 0, 150], [0.5, 1, 0.5]);
     const rotate = useTransform(x, [-150, 0, 150], [-45, 0, 45], { clamp: false });
@@ -21,6 +23,26 @@ export const PaymentSwipeCard = ({ payment, onSwipe, onImageClick, className, st
     // Opacity regarding swipe direction
     const opacityLeft = useTransform(x, [-100, 0], [1, 0]); // Left swipe accepts
     const opacityRight = useTransform(x, [0, 100], [0, 1]); // Right swipe rejects
+
+    useEffect(() => {
+        let active = true;
+
+        const resolveReceiptUrl = async () => {
+            if (!payment.screenshot_url) {
+                setReceiptUrl(null);
+                return;
+            }
+
+            const url = await getPaymentReceiptUrl(payment.screenshot_url);
+            if (active) setReceiptUrl(url);
+        };
+
+        void resolveReceiptUrl();
+
+        return () => {
+            active = false;
+        };
+    }, [payment.screenshot_url]);
 
     const handleDragEnd = (_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
         if (info.offset.x < -100) {
@@ -74,14 +96,14 @@ export const PaymentSwipeCard = ({ payment, onSwipe, onImageClick, className, st
                     className="relative h-3/5 bg-muted cursor-pointer group"
                     onClick={(e) => {
                         e.stopPropagation(); // Prevent drag interference
-                        if (payment.screenshot_url && onImageClick) onImageClick(payment.screenshot_url);
+                        if (receiptUrl && onImageClick) onImageClick(receiptUrl);
                     }}
                     onPointerDownCapture={(e) => e.stopPropagation()}
                 >
-                    {payment.screenshot_url ? (
+                    {receiptUrl ? (
                         <>
                             <img
-                                src={payment.screenshot_url}
+                                src={receiptUrl}
                                 alt="Payment Screenshot"
                                 className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                                 draggable={false}
@@ -90,6 +112,10 @@ export const PaymentSwipeCard = ({ payment, onSwipe, onImageClick, className, st
                                 <ExternalLink className="w-8 h-8 text-white drop-shadow-lg" />
                             </div>
                         </>
+                    ) : payment.screenshot_url ? (
+                        <div className="w-full h-full flex items-center justify-center bg-muted text-muted-foreground">
+                            <span className="text-sm italic">Loading receipt...</span>
+                        </div>
                     ) : (
                         <div className="w-full h-full flex items-center justify-center bg-muted text-muted-foreground">
                             <span className="text-sm italic">No screenshot provided</span>
@@ -114,13 +140,13 @@ export const PaymentSwipeCard = ({ payment, onSwipe, onImageClick, className, st
                 </div>
 
                 {/* Details Footer */}
-                <div className="flex-1 p-5 bg-card flex flex-col gap-3 justify-center relative pointer-events-none">
+                <div className="flex-1 p-5 bg-card flex flex-col gap-3 justify-center relative">
                     {/* Gradient Check/Cross Icons to reinforce direction */}
                     <div className="absolute left-4 top-[-1.5rem] bg-white dark:bg-zinc-900 rounded-full p-2 shadow-lg border border-border">
-                        <X className="w-6 h-6 text-red-500" />
+                        <Check className="w-6 h-6 text-green-500" />
                     </div>
                     <div className="absolute right-4 top-[-1.5rem] bg-white dark:bg-zinc-900 rounded-full p-2 shadow-lg border border-border">
-                        <Check className="w-6 h-6 text-green-500" />
+                        <X className="w-6 h-6 text-red-500" />
                     </div>
 
                     <div className="mt-2 space-y-2">
@@ -176,7 +202,33 @@ export const PaymentSwipeCard = ({ payment, onSwipe, onImageClick, className, st
                         )}
                     </div>
 
-                    <div className="mt-auto text-center">
+                    <div className="mt-auto space-y-3 text-center">
+                        <div className="grid grid-cols-2 gap-2 pointer-events-auto">
+                            <button
+                                type="button"
+                                className="rounded-xl bg-green-600 px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-green-700"
+                                onPointerDownCapture={(event) => event.stopPropagation()}
+                                onClick={(event) => {
+                                    event.stopPropagation();
+                                    setExitX(-200);
+                                    onSwipe(payment.id, "left");
+                                }}
+                            >
+                                Approve
+                            </button>
+                            <button
+                                type="button"
+                                className="rounded-xl bg-destructive px-3 py-2 text-xs font-bold text-destructive-foreground transition-colors hover:bg-destructive/90"
+                                onPointerDownCapture={(event) => event.stopPropagation()}
+                                onClick={(event) => {
+                                    event.stopPropagation();
+                                    setExitX(200);
+                                    onSwipe(payment.id, "right");
+                                }}
+                            >
+                                Reject
+                            </button>
+                        </div>
                         <p className="text-xs text-muted-foreground/60">Swipe LEFT to Accept • RIGHT to Reject</p>
                     </div>
                 </div>

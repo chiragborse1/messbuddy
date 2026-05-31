@@ -1,6 +1,6 @@
 import { useEffect, useCallback } from 'react';
 import { PushNotifications, Token, ActionPerformed } from '@capacitor/push-notifications';
-import { Capacitor } from '@capacitor/core';
+import { Capacitor, PluginListenerHandle } from '@capacitor/core';
 import { supabase } from '@/lib/supabase';
 import { useUser } from '@/hooks/useUser';
 import { toast } from '@/hooks/use-toast';
@@ -40,43 +40,56 @@ export const usePushNotifications = () => {
                 return;
             }
 
-            // 2. Add Listeners
-            await PushNotifications.addListener('registration', (token: Token) => {
-                saveTokenToDatabase(token.value);
-            });
-
-            await PushNotifications.addListener('registrationError', (error: any) => {
-                console.error('Error on registration: ' + JSON.stringify(error));
-            });
-
-            await PushNotifications.addListener('pushNotificationReceived', (notification) => {
-                toast({
-                    title: notification.title || 'New Notification',
-                    description: notification.body || 'You have a new message.',
-                });
-            });
-
-            await PushNotifications.addListener('pushNotificationActionPerformed', (_notification: ActionPerformed) => {});
-
-            // 3. Register with FCM
+            // Register with FCM. Listeners are managed in the effect below.
             await PushNotifications.register();
 
         } catch (error) {
             console.error('Push notification registration error:', error);
         }
-    }, [saveTokenToDatabase]);
+    }, []);
 
     useEffect(() => {
-        if (user?.id) {
-            registerPush();
+        if (!user?.id || !Capacitor.isNativePlatform()) {
+            return;
         }
 
-        return () => {
-            if (Capacitor.isNativePlatform()) {
-                PushNotifications.removeAllListeners();
-            }
+        let active = true;
+        const listenerHandles: PluginListenerHandle[] = [];
+
+        const addListeners = async () => {
+            listenerHandles.push(
+                await PushNotifications.addListener('registration', (token: Token) => {
+                    saveTokenToDatabase(token.value);
+                }),
+                await PushNotifications.addListener('registrationError', (error: any) => {
+                    console.error('Error on registration: ' + JSON.stringify(error));
+                }),
+                await PushNotifications.addListener('pushNotificationReceived', (notification) => {
+                    toast({
+                        title: notification.title || 'New Notification',
+                        description: notification.body || 'You have a new message.',
+                    });
+                }),
+                await PushNotifications.addListener('pushNotificationActionPerformed', (notification: ActionPerformed) => {
+                    const route = notification.notification.data?.route;
+                    if (typeof route === 'string' && route.startsWith('/')) {
+                        window.location.assign(route);
+                    }
+                }),
+            );
+
+            if (active) await registerPush();
         };
-    }, [user?.id, registerPush]);
+
+        void addListeners();
+
+        return () => {
+            active = false;
+            listenerHandles.forEach((handle) => {
+                void handle.remove();
+            });
+        };
+    }, [registerPush, saveTokenToDatabase, user?.id]);
 
     return { registerPush };
 };

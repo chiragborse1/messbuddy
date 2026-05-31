@@ -1,5 +1,5 @@
 import { useState, useEffect, ReactNode } from "react";
-import { supabase } from "@/lib/supabase";
+import { getProfile, supabase } from "@/lib/supabase";
 import { toast } from "@/hooks/use-toast";
 import { UserContext, UserData } from "@/contexts/user";
 
@@ -9,32 +9,15 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
 
     const fetchProfile = async (userId: string, showToast = false) => {
         try {
-            const { data, error } = await supabase
-                .from('profiles')
-                .select('id, name, email, mobile, college, course, photo_url, role, status, plan, on_leave, plan_start_date, plan_end_date, pending_amount')
-                .eq('id', userId)
-                .single();
+            const profile = await getProfile(userId);
 
-            if (data) {
-                // Map DB fields to UserData interface if needed (snake_case to camelCase)
-                // Assuming DB uses similar names or we map them here
-                setUser({
-                    ...data,
-                    // map snake_case to camelCase
-                    planStartDate: data.plan_start_date,
-                    planEndDate: data.plan_end_date,
-                    photo: data.photo_url,
-                    onLeave: data.on_leave,
-                    pendingAmount: data.pending_amount || 0,
-                    daysRemaining: (['active', 'approved'].includes(data.status) && data.plan_end_date)
-                        ? Math.max(0, Math.ceil((new Date(data.plan_end_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
-                        : 0,
-                });
+            if (profile) {
+                setUser(profile);
                 if (showToast) {
                     toast({ title: "Profile Refreshed", description: "Your data is now up-to-date." });
                 }
-            } else if (error) {
-                console.error("Error fetching profile:", error);
+            } else {
+                setUser(null);
                 if (showToast) {
                     toast({ title: "Refresh Failed", description: "Could not fetch latest data.", variant: "destructive" });
                 }

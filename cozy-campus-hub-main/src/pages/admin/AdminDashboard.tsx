@@ -164,11 +164,23 @@ const AdminDashboard = () => {
 
     fetchDashboardData();
 
+    let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+    const scheduleDashboardRefresh = () => {
+      if (refreshTimer) clearTimeout(refreshTimer);
+      refreshTimer = setTimeout(() => fetchDashboardData(true), 250);
+    };
+
     const realtime = supabase.channel('admin_dashboard')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => fetchDashboardData(true))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, scheduleDashboardRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'payments' }, scheduleDashboardRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'leave_requests' }, scheduleDashboardRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'menu_items' }, scheduleDashboardRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'menu_sessions' }, scheduleDashboardRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'menu_session_items' }, scheduleDashboardRefresh)
       .subscribe();
 
     return () => {
+      if (refreshTimer) clearTimeout(refreshTimer);
       supabase.removeChannel(realtime);
     };
   }, [user, authLoading, navigate]);

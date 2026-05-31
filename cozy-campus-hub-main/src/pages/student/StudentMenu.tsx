@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import PageShell from "@/components/PageShell";
 import StudentBottomNav from "@/components/StudentBottomNav";
 import { Check, Clock, Image as ImageIcon, Loader2, Search, Trophy, Utensils } from "lucide-react";
@@ -39,6 +39,7 @@ const StudentMenu = () => {
   const [loading, setLoading] = useState(!cachedForUser);
   const [votingItemId, setVotingItemId] = useState<number | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const groupedItems = useMemo(() => splitMenuItemsByMeal(sessionItems), [sessionItems]);
   const votingOpen = session?.status === "voting_open";
@@ -117,21 +118,29 @@ const StudentMenu = () => {
     }
   }, [applyMenuData, loadSessionItems, user?.id]);
 
+  const scheduleSilentRefresh = useCallback(() => {
+    if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
+    refreshTimerRef.current = setTimeout(() => {
+      void fetchMenu(true);
+    }, 250);
+  }, [fetchMenu]);
+
   useEffect(() => {
     void fetchMenu();
 
     const channel = supabase
       .channel(`student_menu_sessions_${user?.id || "anonymous"}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "menu_sessions" }, () => fetchMenu(true))
-      .on("postgres_changes", { event: "*", schema: "public", table: "menu_session_items" }, () => fetchMenu(true))
-      .on("postgres_changes", { event: "*", schema: "public", table: "menu_votes" }, () => fetchMenu(true))
-      .on("postgres_changes", { event: "*", schema: "public", table: "menu_items" }, () => fetchMenu(true))
+      .on("postgres_changes", { event: "*", schema: "public", table: "menu_sessions" }, scheduleSilentRefresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "menu_session_items" }, scheduleSilentRefresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "menu_votes" }, scheduleSilentRefresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "menu_items" }, scheduleSilentRefresh)
       .subscribe();
 
     return () => {
+      if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
       supabase.removeChannel(channel);
     };
-  }, [fetchMenu, user?.id]);
+  }, [fetchMenu, scheduleSilentRefresh, user?.id]);
 
   const handleVote = async (item: MenuSessionItem) => {
     if (!votingOpen || !user) return;
