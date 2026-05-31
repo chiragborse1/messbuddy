@@ -155,9 +155,11 @@
           version.textContent = `${manifest.versionName} (${manifest.versionCode})`;
           released.textContent = manifest.releasedAt ? new Date(manifest.releasedAt).toLocaleDateString() : "Not published yet";
           checksum.textContent = manifest.sha256 || "Pending first signed APK";
-          if (manifest.downloadUrl) {
+          if (manifest.downloadUrl && manifest.sha256) {
             download.href = manifest.downloadUrl;
             download.removeAttribute("aria-disabled");
+          } else {
+            download.textContent = "Signed APK pending";
           }
         })
         .catch(() => {

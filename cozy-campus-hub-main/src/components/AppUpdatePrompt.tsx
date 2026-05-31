@@ -12,6 +12,7 @@ type ReleaseManifest = {
   versionCode: number;
   minimumSupportedVersionCode?: number;
   downloadUrl: string;
+  sha256?: string;
   releaseNotes?: string[];
 };
 
@@ -38,7 +39,12 @@ export const AppUpdatePrompt = () => {
         const manifest = (await response.json()) as ReleaseManifest;
         const nextVersionCode = Number(manifest.versionCode);
 
-        if (!Number.isFinite(nextVersionCode) || nextVersionCode <= APP_VERSION_CODE || !manifest.downloadUrl) {
+        if (
+          !Number.isFinite(nextVersionCode) ||
+          nextVersionCode <= APP_VERSION_CODE ||
+          !manifest.downloadUrl ||
+          !manifest.sha256
+        ) {
           return;
         }
 
