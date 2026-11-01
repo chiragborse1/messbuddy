@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Browser } from "@capacitor/browser";
 import { Capacitor } from "@capacitor/core";
-import { Download, X } from "lucide-react";
+import { Download, X, Copy, Check } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { APP_VERSION_CODE, RELEASE_MANIFEST_URL } from "@/lib/appVersion";
@@ -13,13 +13,28 @@ type ReleaseManifest = {
   minimumSupportedVersionCode?: number;
   downloadUrl: string;
   sha256?: string;
+  sizeBytes?: number | null;
   releaseNotes?: string[];
 };
 
 const getDismissKey = (versionCode: number) => `kanhaiya-mess-update-dismissed-${versionCode}`;
 
+const formatBytes = (bytes?: number | null) => {
+  if (!bytes || !Number.isFinite(bytes) || bytes <= 0) return null;
+  const units = ["B", "KB", "MB", "GB"];
+  let value = bytes;
+  let unitIndex = 0;
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex += 1;
+  }
+  return `${value.toFixed(value >= 10 ? 0 : 1)} ${units[unitIndex]}`;
+};
+
 export const AppUpdatePrompt = () => {
   const [availableUpdate, setAvailableUpdate] = useState<ReleaseManifest | null>(null);
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
@@ -79,10 +94,25 @@ export const AppUpdatePrompt = () => {
   };
 
   const openDownload = async () => {
+    setIsDownloading(true);
     try {
       await Browser.open({ url: availableUpdate.downloadUrl });
     } catch {
       window.location.href = availableUpdate.downloadUrl;
+    } finally {
+      // Keep the spinner briefly so the user sees feedback before the browser takes over.
+      setTimeout(() => setIsDownloading(false), 1500);
+    }
+  };
+
+  const copyChecksum = async () => {
+    if (!availableUpdate.sha256) return;
+    try {
+      await navigator.clipboard.writeText(availableUpdate.sha256);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard may be unavailable; ignore.
     }
   };
 
@@ -98,6 +128,8 @@ export const AppUpdatePrompt = () => {
       </ul>
     ) : null;
 
+  const sizeLabel = formatBytes(availableUpdate.sizeBytes);
+
   if (updateRequired) {
     return (
       <div className="fixed inset-0 z-[100] flex items-center justify-center bg-background/90 p-4 backdrop-blur">
@@ -111,12 +143,28 @@ export const AppUpdatePrompt = () => {
               <p className="mt-1 text-sm text-muted-foreground">
                 Version {availableUpdate.versionName} is required to continue. Please update now.
               </p>
+              {sizeLabel && (
+                <p className="mt-1 text-xs text-muted-foreground">Download size: {sizeLabel}</p>
+              )}
               {renderNotes("mt-3 space-y-1 text-xs text-muted-foreground")}
+              {availableUpdate.sha256 && (
+                <div className="mt-3 flex items-center gap-2 rounded-md bg-muted/50 px-2 py-1.5 text-[10px] text-muted-foreground">
+                  <span className="font-mono truncate">{availableUpdate.sha256}</span>
+                  <button
+                    type="button"
+                    className="shrink-0 rounded p-0.5 hover:bg-muted hover:text-foreground"
+                    aria-label="Copy checksum"
+                    onClick={copyChecksum}
+                  >
+                    {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                  </button>
+                </div>
+              )}
             </div>
           </div>
           <div className="mt-4 flex justify-end">
-            <Button type="button" size="sm" onClick={openDownload}>
-              Download update
+            <Button type="button" size="sm" onClick={openDownload} disabled={isDownloading}>
+              {isDownloading ? "Opening download..." : "Download update"}
             </Button>
           </div>
         </div>
@@ -136,6 +184,9 @@ export const AppUpdatePrompt = () => {
             <p className="mt-1 text-xs leading-5 text-muted-foreground">
               Version {availableUpdate.versionName} is ready to download and install.
             </p>
+            {sizeLabel && (
+              <p className="mt-1 text-xs text-muted-foreground">Size: {sizeLabel}</p>
+            )}
             {renderNotes("mt-2 space-y-1 text-xs text-muted-foreground")}
           </div>
           <button
@@ -151,8 +202,8 @@ export const AppUpdatePrompt = () => {
           <Button type="button" variant="outline" size="sm" onClick={dismiss}>
             Later
           </Button>
-          <Button type="button" size="sm" onClick={openDownload}>
-            Download
+          <Button type="button" size="sm" onClick={openDownload} disabled={isDownloading}>
+            {isDownloading ? "Opening..." : "Download"}
           </Button>
         </div>
       </div>
