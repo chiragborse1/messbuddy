@@ -37,6 +37,11 @@ const config: CapacitorConfig = {
             style: 'DEFAULT',
             backgroundColor: '#ffffff',
         },
+        CapacitorUpdater: {
+            // Capgo channel for OTA web-bundle updates. Override via env if needed.
+            autoUpdate: true,
+            directUpdate: 'always',
+        },
     },
 };
 

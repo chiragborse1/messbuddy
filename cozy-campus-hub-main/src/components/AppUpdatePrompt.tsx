@@ -43,11 +43,6 @@ const formatBytes = (bytes?: number | null) => {
   return `${value.toFixed(value >= 10 ? 0 : 1)} ${units[unitIndex]}`;
 };
 
-const bufferToHex = (buffer: ArrayBuffer) =>
-  Array.from(new Uint8Array(buffer))
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("");
-
 export const AppUpdatePrompt = () => {
   const [availableUpdate, setAvailableUpdate] = useState<ReleaseManifest | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
@@ -83,7 +78,6 @@ export const AppUpdatePrompt = () => {
         }
 
         const isRequired = Number(manifest.minimumSupportedVersionCode ?? 0) > APP_VERSION_CODE;
-        const wasDismissed = localStorage.getItem(getDismissKey(nextVersionCode)) === "true";
 
         if (!isRequired) {
           const rollout = Number(manifest.rolloutPercentage ?? 100);
@@ -91,6 +85,8 @@ export const AppUpdatePrompt = () => {
             return;
           }
         }
+
+        const wasDismissed = localStorage.getItem(getDismissKey(nextVersionCode)) === "true";
 
         if (active && (isRequired || !wasDismissed)) {
           setAvailableUpdate({ ...manifest, versionCode: nextVersionCode });
@@ -125,47 +121,29 @@ export const AppUpdatePrompt = () => {
     setDownloadProgress(0);
 
     try {
-      const response = await fetch(availableUpdate.downloadUrl, { cache: "no-store" });
-      if (!response.ok || !response.body) {
-        throw new Error(`Download failed (${response.status})`);
+      // Prefer the native in-app installer (downloads + triggers Android install prompt).
+      const installer = (Capacitor as unknown as {
+        Plugins?: { ApkInstaller?: { install: (opts: { url: string }) => Promise<void> } };
+      }).Plugins?.ApkInstaller;
+
+      if (installer) {
+        setDownloadProgress(50);
+        await installer.install({ url: availableUpdate.downloadUrl });
+        setDownloadProgress(100);
+        return;
       }
 
-      const contentLength = Number(response.headers.get("content-length"));
-      const total = Number.isFinite(contentLength) && contentLength > 0 ? contentLength : availableUpdate.sizeBytes ?? 0;
-
-      const reader = response.body.getReader();
-      const chunks: Uint8Array[] = [];
-      let received = 0;
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        if (value) {
-          chunks.push(value);
-          received += value.length;
-          if (total > 0) {
-            setDownloadProgress(Math.min(99, Math.round((received / total) * 100)));
-          }
-        }
-      }
-
-      const blob = new Blob(chunks as BlobPart[], { type: "application/vnd.android.package-archive" });
-
-      const hashBuffer = await crypto.subtle.digest("SHA-256", await blob.arrayBuffer());
-      const actualHash = bufferToHex(hashBuffer);
-      if (actualHash.toLowerCase() !== availableUpdate.sha256!.toLowerCase()) {
-        throw new Error("Checksum mismatch. The downloaded file may be corrupted or tampered with.");
-      }
-
-      setDownloadProgress(100);
-
-      // Hand off to the browser/installer. window.open works on both web and native.
+      // Fallback for web/preview: open the signed release URL in the browser.
       const opened = window.open(availableUpdate.downloadUrl, "_blank", "noopener,noreferrer");
-      if (!opened) {
-        window.location.href = availableUpdate.downloadUrl;
-      }
+      if (!opened) window.location.href = availableUpdate.downloadUrl;
     } catch (error) {
-      setDownloadError(error instanceof Error ? error.message : "Download failed.");
+      setDownloadError(error instanceof Error ? error.message : "Update failed. Please try again.");
+      // Last-resort fallback so the user can still get the update.
+      try {
+        window.location.href = availableUpdate.downloadUrl;
+      } catch {
+        // ignore
+      }
     } finally {
       setTimeout(() => {
         setIsDownloading(false);
@@ -239,7 +217,7 @@ export const AppUpdatePrompt = () => {
                     />
                   </div>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Verifying download... {downloadProgress}%
+                    Installing update... {downloadProgress}%
                   </p>
                 </div>
               )}
@@ -248,9 +226,9 @@ export const AppUpdatePrompt = () => {
               )}
             </div>
           </div>
-          <div className="mt-4 flex justify-end gap-2">
+          <div className="mt-4 flex justify-end">
             <Button type="button" size="sm" onClick={openDownload} disabled={isDownloading}>
-              {isDownloading ? "Downloading..." : "Download update"}
+              {isDownloading ? "Installing..." : "Download update"}
             </Button>
           </div>
         </div>
@@ -302,7 +280,7 @@ export const AppUpdatePrompt = () => {
             Later
           </Button>
           <Button type="button" size="sm" onClick={openDownload} disabled={isDownloading}>
-            {isDownloading ? "Downloading..." : "Download"}
+            {isDownloading ? "Installing..." : "Install update"}
           </Button>
         </div>
       </div>
