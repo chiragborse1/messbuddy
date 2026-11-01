@@ -10,6 +10,7 @@ type ReleaseManifest = {
   versionName: string;
   versionCode: number;
   minimumSupportedVersionCode?: number;
+  rolloutPercentage?: number;
   downloadUrl: string;
   sha256?: string;
   sizeBytes?: number | null;
@@ -17,6 +18,18 @@ type ReleaseManifest = {
 };
 
 const getDismissKey = (versionCode: number) => `kanhaiya-mess-update-dismissed-${versionCode}`;
+
+const getRolloutBucket = () => {
+  const key = "kanhaiya-mess-rollout-bucket";
+  const stored = localStorage.getItem(key);
+  if (stored !== null) {
+    const value = Number(stored);
+    if (Number.isFinite(value)) return value;
+  }
+  const bucket = Math.floor(Math.random() * 100);
+  localStorage.setItem(key, String(bucket));
+  return bucket;
+};
 
 const formatBytes = (bytes?: number | null) => {
   if (!bytes || !Number.isFinite(bytes) || bytes <= 0) return null;
@@ -71,6 +84,13 @@ export const AppUpdatePrompt = () => {
 
         const isRequired = Number(manifest.minimumSupportedVersionCode ?? 0) > APP_VERSION_CODE;
         const wasDismissed = localStorage.getItem(getDismissKey(nextVersionCode)) === "true";
+
+        if (!isRequired) {
+          const rollout = Number(manifest.rolloutPercentage ?? 100);
+          if (Number.isFinite(rollout) && rollout < 100 && getRolloutBucket() >= rollout) {
+            return;
+          }
+        }
 
         if (active && (isRequired || !wasDismissed)) {
           setAvailableUpdate({ ...manifest, versionCode: nextVersionCode });
