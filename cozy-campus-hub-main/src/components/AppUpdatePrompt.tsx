@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { Browser } from "@capacitor/browser";
 import { Capacitor } from "@capacitor/core";
 import { Download, X, Copy, Check, ShieldCheck } from "lucide-react";
 
@@ -106,7 +105,6 @@ export const AppUpdatePrompt = () => {
     setDownloadProgress(0);
 
     try {
-      // Stream the APK so we can show progress and verify its checksum before install.
       const response = await fetch(availableUpdate.downloadUrl, { cache: "no-store" });
       if (!response.ok || !response.body) {
         throw new Error(`Download failed (${response.status})`);
@@ -133,7 +131,6 @@ export const AppUpdatePrompt = () => {
 
       const blob = new Blob(chunks as BlobPart[], { type: "application/vnd.android.package-archive" });
 
-      // Verify SHA-256 before handing off to the installer.
       const hashBuffer = await crypto.subtle.digest("SHA-256", await blob.arrayBuffer());
       const actualHash = bufferToHex(hashBuffer);
       if (actualHash.toLowerCase() !== availableUpdate.sha256!.toLowerCase()) {
@@ -142,10 +139,11 @@ export const AppUpdatePrompt = () => {
 
       setDownloadProgress(100);
 
-      // Hand off to the Android installer. On native we open the browser to the
-      // signed release URL as a fallback because installing an APK requires a
-      // native install intent; the downloaded bytes are still verified above.
-      await Browser.open({ url: availableUpdate.downloadUrl });
+      // Hand off to the browser/installer. window.open works on both web and native.
+      const opened = window.open(availableUpdate.downloadUrl, "_blank", "noopener,noreferrer");
+      if (!opened) {
+        window.location.href = availableUpdate.downloadUrl;
+      }
     } catch (error) {
       setDownloadError(error instanceof Error ? error.message : "Download failed.");
     } finally {
