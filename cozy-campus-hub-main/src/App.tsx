@@ -37,16 +37,20 @@ import AuthCallback from "./pages/AuthCallback";
 
 const queryClient = new QueryClient();
 
+import { ErrorBoundary } from "@/components/ErrorBoundary";
+
 const App = () => {
   return (
-    <QueryClientProvider client={queryClient}>
-      <ThemeProvider>
-        <UserProvider>
-          <AppWithNotifications />
-        </UserProvider>
-      </ThemeProvider>
-      {import.meta.env.PROD && <SpeedInsights />}
-    </QueryClientProvider>
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider>
+          <UserProvider>
+            <AppWithNotifications />
+          </UserProvider>
+        </ThemeProvider>
+        {import.meta.env.PROD && <SpeedInsights />}
+      </QueryClientProvider>
+    </ErrorBoundary>
   );
 };
 

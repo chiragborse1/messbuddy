@@ -184,12 +184,12 @@ const toValidDate = (value: PlanDateInput): Date | null => {
 
 const addDays = (date: Date, days: number) => {
   const nextDate = new Date(date);
-  nextDate.setDate(nextDate.getDate() + days);
+  nextDate.setUTCDate(nextDate.getUTCDate() + days);
   return nextDate;
 };
 
 const daysInStartMonth = (date: Date) =>
-  new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+  new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0)).getUTCDate();
 
 export const calculatePlanEndDate = (
   start: PlanDateInput,

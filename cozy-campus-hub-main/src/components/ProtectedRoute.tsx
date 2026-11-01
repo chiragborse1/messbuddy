@@ -1,5 +1,5 @@
 import { Navigate } from "react-router-dom";
-import { Loader2 } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useUser } from "@/hooks/useUser";
 import { hasActiveStudentAccess, hasAdminAccess } from "@/lib/access";
 
@@ -8,19 +8,14 @@ interface ProtectedRouteProps {
     requiredRole: "student" | "admin";
 }
 
-/**
- * Wraps a route and enforces role-based access.
- * - Loading    → spinner (no blank screen flash)
- * - Not logged in → redirect to /
- * - Admin routes → allow 'admin' and 'developer' roles
- * - Student routes → allow 'student' role only
- */
 const ProtectedRoute = ({ children, requiredRole }: ProtectedRouteProps) => {
     const { user, loading } = useUser();
 
     if (loading) return (
-        <div className="min-h-screen flex items-center justify-center">
-            <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        <div className="min-h-screen flex flex-col items-center justify-center gap-4 px-6">
+            <Skeleton className="h-12 w-12 rounded-full" />
+            <Skeleton className="h-4 w-40" />
+            <Skeleton className="h-4 w-28" />
         </div>
     );
 

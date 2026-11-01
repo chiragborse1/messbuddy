@@ -25,7 +25,7 @@ const StudentBottomNav = () => {
               type="button"
               aria-current={isActive ? "page" : undefined}
               onClick={() => navigate(tab.path)}
-              className={`min-w-0 flex flex-col items-center gap-0.5 rounded-2xl py-2 px-1.5 transition-all outline-none [-webkit-tap-highlight-color:transparent] focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-2 focus-visible:ring-offset-card ${isActive
+              className={`min-w-0 flex flex-col items-center gap-0.5 rounded-2xl py-2 px-1.5 transition-colors outline-none [-webkit-tap-highlight-color:transparent] ${isActive
                   ? "bg-primary text-primary-foreground shadow-sm"
                   : "text-muted-foreground hover:text-foreground"
                 }`}

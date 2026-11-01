@@ -9,7 +9,7 @@ import { Send, User as UserIcon, Image as ImageIcon, X, Download, Reply, Clock }
 import { useNavigate } from "react-router-dom";
 import SwipeableMessage from "@/components/SwipeableMessage";
 import { toast } from "@/hooks/use-toast";
-import { validateImageFile } from "@/lib/uploads";
+import { validateImageFile, compressImageFile } from "@/lib/uploads";
 
 interface Message {
     id: string;
@@ -212,13 +212,14 @@ const StudentChat = () => {
 
         try {
             if (selectedFile) {
-                const fileExt = selectedFile.name.split('.').pop();
+                const compressed = await compressImageFile(selectedFile);
+                const fileExt = compressed.name.split('.').pop();
                 const fileName = `${Math.random().toString(36).substring(2)}_${Date.now()}.${fileExt}`;
                 const filePath = `${fileName}`;
 
                 const { error: uploadError } = await supabase.storage
                     .from('chat_images')
-                    .upload(filePath, selectedFile);
+                    .upload(filePath, compressed);
 
                 if (uploadError) throw uploadError;
 

@@ -68,3 +68,54 @@ export const getImageValidationError = (
   if (result.ok === false) return result.error;
   return null;
 };
+export const compressImageFile = async (
+  file: File,
+  options: { maxWidth?: number; maxHeight?: number; quality?: number; mimeType?: string } = {},
+): Promise<File> => {
+  const maxWidth = options.maxWidth ?? 1280;
+  const maxHeight = options.maxHeight ?? 1280;
+  const quality = options.quality ?? 0.8;
+  const mimeType = options.mimeType ?? "image/jpeg";
+
+  if (!file.type.startsWith("image/")) return file;
+
+  return new Promise((resolve) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      let { width, height } = img;
+      if (width > maxWidth || height > maxHeight) {
+        const ratio = Math.min(maxWidth / width, maxHeight / height);
+        width = Math.round(width * ratio);
+        height = Math.round(height * ratio);
+      }
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        resolve(file);
+        return;
+      }
+      ctx.drawImage(img, 0, 0, width, height);
+      canvas.toBlob(
+        (blob) => {
+          if (!blob || blob.size >= file.size) {
+            resolve(file);
+            return;
+          }
+          const ext = mimeType === "image/png" ? "png" : "jpg";
+          resolve(new File([blob], file.name.replace(/\.[^.]+$/, `.${ext}`), { type: mimeType }));
+        },
+        mimeType,
+        quality,
+      );
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      resolve(file);
+    };
+    img.src = url;
+  });
+};
