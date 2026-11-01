@@ -119,3 +119,15 @@
     scrollbar-width: none;
   }
 }
+
+
+/* Mobile-native feel */
+html, body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; }
+* { -webkit-overflow-scrolling: touch; }
+button, a, [role="button"] { touch-action: manipulation; user-select: none; }
+input, textarea { user-select: text; -webkit-user-select: text; }
+.pressable:active { transform: scale(0.97); transition: transform 0.08s ease; }
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+.scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+.safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+.safe-top { padding-top: env(safe-area-inset-top); }
