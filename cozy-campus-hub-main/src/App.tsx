@@ -1,3 +1,5 @@
+import { CapacitorUpdater } from "@capgo/capacitor-updater";
+import { useEffect } from "react";
 import { SpeedInsights } from "@vercel/speed-insights/react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
@@ -40,6 +42,11 @@ const queryClient = new QueryClient();
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 const App = () => {
+  useEffect(() => {
+    // Tell Capgo the app loaded successfully so it doesn't roll back the update.
+    CapacitorUpdater.notifyAppReady().catch(() => undefined);
+  }, []);
+
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
