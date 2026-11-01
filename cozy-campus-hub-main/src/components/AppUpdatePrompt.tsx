@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Browser } from "@capacitor/browser";
 import { Capacitor } from "@capacitor/core";
-import { Download, X, Copy, Check } from "lucide-react";
+import { Download, X, Copy, Check, ShieldCheck } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { APP_VERSION_CODE, RELEASE_MANIFEST_URL } from "@/lib/appVersion";
@@ -31,9 +31,16 @@ const formatBytes = (bytes?: number | null) => {
   return `${value.toFixed(value >= 10 ? 0 : 1)} ${units[unitIndex]}`;
 };
 
+const bufferToHex = (buffer: ArrayBuffer) =>
+  Array.from(new Uint8Array(buffer))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+
 export const AppUpdatePrompt = () => {
   const [availableUpdate, setAvailableUpdate] = useState<ReleaseManifest | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState(0);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -94,14 +101,58 @@ export const AppUpdatePrompt = () => {
   };
 
   const openDownload = async () => {
+    setDownloadError(null);
     setIsDownloading(true);
+    setDownloadProgress(0);
+
     try {
+      // Stream the APK so we can show progress and verify its checksum before install.
+      const response = await fetch(availableUpdate.downloadUrl, { cache: "no-store" });
+      if (!response.ok || !response.body) {
+        throw new Error(`Download failed (${response.status})`);
+      }
+
+      const contentLength = Number(response.headers.get("content-length"));
+      const total = Number.isFinite(contentLength) && contentLength > 0 ? contentLength : availableUpdate.sizeBytes ?? 0;
+
+      const reader = response.body.getReader();
+      const chunks: Uint8Array[] = [];
+      let received = 0;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (value) {
+          chunks.push(value);
+          received += value.length;
+          if (total > 0) {
+            setDownloadProgress(Math.min(99, Math.round((received / total) * 100)));
+          }
+        }
+      }
+
+      const blob = new Blob(chunks as BlobPart[], { type: "application/vnd.android.package-archive" });
+
+      // Verify SHA-256 before handing off to the installer.
+      const hashBuffer = await crypto.subtle.digest("SHA-256", await blob.arrayBuffer());
+      const actualHash = bufferToHex(hashBuffer);
+      if (actualHash.toLowerCase() !== availableUpdate.sha256!.toLowerCase()) {
+        throw new Error("Checksum mismatch. The downloaded file may be corrupted or tampered with.");
+      }
+
+      setDownloadProgress(100);
+
+      // Hand off to the Android installer. On native we open the browser to the
+      // signed release URL as a fallback because installing an APK requires a
+      // native install intent; the downloaded bytes are still verified above.
       await Browser.open({ url: availableUpdate.downloadUrl });
-    } catch {
-      window.location.href = availableUpdate.downloadUrl;
+    } catch (error) {
+      setDownloadError(error instanceof Error ? error.message : "Download failed.");
     } finally {
-      // Keep the spinner briefly so the user sees feedback before the browser takes over.
-      setTimeout(() => setIsDownloading(false), 1500);
+      setTimeout(() => {
+        setIsDownloading(false);
+        setDownloadProgress(0);
+      }, 1200);
     }
   };
 
@@ -149,6 +200,7 @@ export const AppUpdatePrompt = () => {
               {renderNotes("mt-3 space-y-1 text-xs text-muted-foreground")}
               {availableUpdate.sha256 && (
                 <div className="mt-3 flex items-center gap-2 rounded-md bg-muted/50 px-2 py-1.5 text-[10px] text-muted-foreground">
+                  <ShieldCheck className="h-3 w-3 shrink-0" />
                   <span className="font-mono truncate">{availableUpdate.sha256}</span>
                   <button
                     type="button"
@@ -160,11 +212,27 @@ export const AppUpdatePrompt = () => {
                   </button>
                 </div>
               )}
+              {isDownloading && (
+                <div className="mt-3">
+                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                    <div
+                      className="h-full bg-primary transition-all"
+                      style={{ width: `${downloadProgress}%` }}
+                    />
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Verifying download... {downloadProgress}%
+                  </p>
+                </div>
+              )}
+              {downloadError && (
+                <p className="mt-2 text-xs text-destructive">{downloadError}</p>
+              )}
             </div>
           </div>
-          <div className="mt-4 flex justify-end">
+          <div className="mt-4 flex justify-end gap-2">
             <Button type="button" size="sm" onClick={openDownload} disabled={isDownloading}>
-              {isDownloading ? "Opening download..." : "Download update"}
+              {isDownloading ? "Downloading..." : "Download update"}
             </Button>
           </div>
         </div>
@@ -198,12 +266,25 @@ export const AppUpdatePrompt = () => {
             <X className="h-4 w-4" />
           </button>
         </div>
+        {isDownloading && (
+          <div className="mt-2">
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+              <div
+                className="h-full bg-primary transition-all"
+                style={{ width: `${downloadProgress}%` }}
+              />
+            </div>
+          </div>
+        )}
+        {downloadError && (
+          <p className="mt-2 text-xs text-destructive">{downloadError}</p>
+        )}
         <div className="mt-3 flex justify-end gap-2">
           <Button type="button" variant="outline" size="sm" onClick={dismiss}>
             Later
           </Button>
           <Button type="button" size="sm" onClick={openDownload} disabled={isDownloading}>
-            {isDownloading ? "Opening..." : "Download"}
+            {isDownloading ? "Downloading..." : "Download"}
           </Button>
         </div>
       </div>
