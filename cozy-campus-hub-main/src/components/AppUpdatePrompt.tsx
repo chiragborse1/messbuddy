@@ -86,43 +86,71 @@ export const AppUpdatePrompt = () => {
     }
   };
 
+  const renderNotes = (className: string) =>
+    availableUpdate.releaseNotes && availableUpdate.releaseNotes.length > 0 ? (
+      <ul className={className}>
+        {availableUpdate.releaseNotes.map((note, index) => (
+          <li key={index} className="flex gap-2">
+            <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
+            <span>{note}</span>
+          </li>
+        ))}
+      </ul>
+    ) : null;
+
+  if (updateRequired) {
+    return (
+      <div className="fixed inset-0 z-[100] flex items-center justify-center bg-background/90 p-4 backdrop-blur">
+        <div className="w-full max-w-md rounded-2xl border border-destructive/40 bg-background p-5 shadow-2xl">
+          <div className="flex items-start gap-3">
+            <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-destructive/10 text-destructive">
+              <Download className="h-5 w-5" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="text-base font-semibold">Update required</div>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Version {availableUpdate.versionName} is required to continue. Please update now.
+              </p>
+              {renderNotes("mt-3 space-y-1 text-xs text-muted-foreground")}
+            </div>
+          </div>
+          <div className="mt-4 flex justify-end">
+            <Button type="button" size="sm" onClick={openDownload}>
+              Download update
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="fixed inset-x-3 bottom-[calc(env(safe-area-inset-bottom)+84px)] z-[95] mx-auto max-w-md">
-      <div
-        className={cn(
-          "rounded-xl border bg-background/95 p-3 shadow-2xl backdrop-blur",
-          updateRequired ? "border-destructive/40" : "border-border",
-        )}
-      >
+      <div className="rounded-xl border bg-background/95 p-3 shadow-2xl backdrop-blur border-border">
         <div className="flex items-start gap-3">
           <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
             <Download className="h-4 w-4" />
           </div>
           <div className="min-w-0 flex-1">
-            <div className="text-sm font-semibold">
-              {updateRequired ? "Update required" : "APK update available"}
-            </div>
+            <div className="text-sm font-semibold">APK update available</div>
             <p className="mt-1 text-xs leading-5 text-muted-foreground">
               Version {availableUpdate.versionName} is ready to download and install.
             </p>
+            {renderNotes("mt-2 space-y-1 text-xs text-muted-foreground")}
           </div>
-          {!updateRequired && (
-            <button
-              type="button"
-              className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
-              aria-label="Dismiss update"
-              onClick={dismiss}
-            >
-              <X className="h-4 w-4" />
-            </button>
-          )}
+          <button
+            type="button"
+            className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+            aria-label="Dismiss update"
+            onClick={dismiss}
+          >
+            <X className="h-4 w-4" />
+          </button>
         </div>
         <div className="mt-3 flex justify-end gap-2">
-          {!updateRequired && (
-            <Button type="button" variant="outline" size="sm" onClick={dismiss}>
-              Later
-            </Button>
-          )}
+          <Button type="button" variant="outline" size="sm" onClick={dismiss}>
+            Later
+          </Button>
           <Button type="button" size="sm" onClick={openDownload}>
             Download
           </Button>
